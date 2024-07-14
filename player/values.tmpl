@@ -1,0 +1,7 @@
+func {{.enum.Name}}Values() []{{.enum.Name}}{
+	values := make([]{{.enum.Name}}, 0, len(_{{.enum.Name}}Value))
+	for v := range _{{.enum.Name}}Map {
+		values = append(values, v)
+	}
+	return values
+}
