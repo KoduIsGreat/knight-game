@@ -1,7 +1,6 @@
 package game
 
 import (
-	"log"
 	"time"
 
 	"github.com/gen2brain/raylib-go/physics"
@@ -50,9 +49,9 @@ func NewGame(title string, r Resolution) Game {
 }
 
 func (g *game) Init() {
-	// do some things here
 	rl.InitWindow(g.Resolution.Width, g.Resolution.Height, g.Title)
 	physics.Init()
+	rl.SetTargetFPS(60)
 }
 
 func (g *game) AddComponent(c Component) {
@@ -60,13 +59,12 @@ func (g *game) AddComponent(c Component) {
 }
 
 func (g *game) Process() {
-	log.Println("we gaming")
 	for !rl.WindowShouldClose() {
 		since := time.Duration(0)
+		physics.Update()
 		for _, c := range g.components {
 			ct := time.Now()
 			c.Update(since.Seconds())
-			physics.Update()
 			c.Physics(since.Seconds())
 			rl.BeginDrawing()
 			rl.ClearBackground(rl.RayWhite)

@@ -1,7 +1,8 @@
 package player
 
 import (
-	"github.com/KoduIsGreat/knight-game/controls"
+	"log"
+
 	"github.com/KoduIsGreat/knight-game/game"
 	"github.com/KoduIsGreat/knight-game/sprite"
 	"github.com/KoduIsGreat/knight-game/state"
@@ -25,6 +26,7 @@ type Player struct {
 var _ game.Component = &Player{}
 
 func (p *Player) ChangeState(ns PlayerState) {
+	log.Println("Changing state to ", ns.String())
 	p.activeState = ns
 }
 
@@ -44,8 +46,8 @@ func (p *Player) Init() {
 	p.states = map[PlayerState]state.State{
 		PlayerStateIDLE:    &Idle{p: p},
 		PlayerStateRUNNING: &Running{p: p},
-		PlayerStateJUMPING: &Jumping{p: p},
-		PlayerStateFALLING: &Falling{p: p},
+		// PlayerStateJUMPING: &Jumping{p: p},
+		// PlayerStateFALLING: &Falling{p: p},
 	}
 	p.activeState = PlayerStateIDLE
 	sheet := rl.LoadTexture("./assets/KnightIdle_ss.png")
@@ -55,25 +57,22 @@ func (p *Player) Init() {
 		Offset: rl.NewVector2(float32(rl.GetScreenWidth()/2), float32(rl.GetScreenHeight()/2)),
 	}
 	p.body = physics.NewBodyRectangle(playerPosition, float32(sheet.Width), float32(sheet.Height), .3)
-	p.Sprite2dAnimator = sprite.NewSprite2dAnimator(sheet, 2, playerPosition)
+	p.body.UseGravity = false
+	p.Sprite2dAnimator = sprite.NewSprite2dAnimator(sheet, 2, &p.body.Position)
 }
 
 func (p *Player) Update(dt float64) {
-	key := rl.GetKeyPressed()
-	switch key {
-	case controls.JUMP:
-		p.ChangeState(PlayerStateJUMPING)
-		break
-	case controls.MOVE_LEFT, controls.MOVE_RIGHT:
+	// if rl.IsKeyPressed(rl.KeyDelete) {
+	// 	p.ChangeState(PlayerStateJUMPING)
+	// }
+	if rl.IsKeyPressed(rl.KeyA) || rl.IsKeyPressed(rl.KeyLeft) {
 		p.ChangeState(PlayerStateRUNNING)
-		break
 	}
 	p.states[p.activeState].Update(dt)
 	p.Sprite2dAnimator.Update(dt)
 	for _, child := range p.Children {
 		child.Update(dt)
 	}
-
 }
 
 func (p *Player) Render() {

@@ -17,7 +17,7 @@ type Sprite2dAnimator struct {
 	SpriteSheet   rl.Texture2D
 	pos           rl.Vector2
 	NumFrames     float32
-	Speed         int
+	speed         int
 	currentFrame  float32
 	frameRec      rl.Rectangle
 	framesCounter int
@@ -28,7 +28,7 @@ func NewSprite2dAnimator(spriteSheet rl.Texture2D, numFrames float32, speed int)
 		SpriteSheet:   spriteSheet,
 		NumFrames:     numFrames,
 		frameRec:      rl.NewRectangle(0, 0, float32(spriteSheet.Width/int32(numFrames)), float32(spriteSheet.Height)),
-		Speed:         speed,
+		speed:         speed,
 		framesCounter: 0,
 	}
 }
@@ -39,7 +39,7 @@ func (s *Sprite2dAnimator) Destroy() {
 
 func (s *Sprite2dAnimator) Update(dt float32) {
 	s.framesCounter++
-	if s.framesCounter >= (60 / s.Speed) {
+	if s.framesCounter >= (60 / s.speed) {
 		s.framesCounter = 0
 		s.currentFrame++
 		if s.currentFrame > s.NumFrames-1 {
@@ -48,14 +48,14 @@ func (s *Sprite2dAnimator) Update(dt float32) {
 		s.frameRec.X = s.currentFrame * float32(s.SpriteSheet.Width) / (s.NumFrames)
 	}
 	if rl.IsKeyPressed(rl.KeyRight) {
-		s.Speed++
+		s.speed++
 	} else if rl.IsKeyPressed(rl.KeyLeft) {
-		s.Speed--
+		s.speed--
 	}
-	if s.Speed > maxFrameSpeed {
-		s.Speed = maxFrameSpeed
-	} else if s.Speed < minFrameSpeed {
-		s.Speed = minFrameSpeed
+	if s.speed > maxFrameSpeed {
+		s.speed = maxFrameSpeed
+	} else if s.speed < minFrameSpeed {
+		s.speed = minFrameSpeed
 	}
 }
 

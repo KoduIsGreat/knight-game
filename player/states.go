@@ -20,9 +20,12 @@ func (i *Idle) Physics(dt float64) {
 // Update implements state.Machine.
 func (i *Idle) Update(dt float64) {
 	if rl.IsKeyPressed(rl.KeyD) || rl.IsKeyPressed(rl.KeyA) {
+		fmt.Println("Key is pressed ")
 		i.p.ChangeState(PlayerStateRUNNING)
 	}
-
+	if rl.IsKeyPressed((rl.KeyDelete)) {
+		i.p.ChangeState(PlayerStateJUMPING)
+	}
 }
 
 type Running struct {
@@ -31,21 +34,28 @@ type Running struct {
 
 // Physics implements state.State.
 func (r *Running) Physics(dt float64) {
-	if rl.IsKeyDown(controls.MOVE_RIGHT) {
+	fmt.Println("velocity ")
+	if rl.IsKeyDown(rl.KeyD) {
 		r.p.body.Velocity.X = PlayerVelocity
-	} else if rl.IsKeyDown(controls.MOVE_LEFT) {
+		r.p.body.Position.X += r.p.body.Velocity.X
+		fmt.Println("velocity ", r.p.body.Velocity.X)
+		fmt.Println("position ", r.p.body.Position.X)
+	} else if rl.IsKeyDown(rl.KeyA) {
 		r.p.body.Velocity.X = -PlayerVelocity
+		r.p.body.Position.X -= r.p.body.Velocity.X
 	}
-	if rl.IsKeyDown(controls.JUMP) && r.p.body.IsGrounded {
+	if rl.IsKeyDown(rl.KeyDelete) && r.p.body.IsGrounded {
 		r.p.ChangeState(PlayerStateJUMPING)
 	}
 }
 
 // Update implements state.State.
 func (r *Running) Update(dt float64) {
-	if !rl.IsKeyPressed(controls.MOVE_LEFT) && !rl.IsKeyPressed(controls.MOVE_RIGHT) && r.p.body.IsGrounded {
-		r.p.ChangeState(PlayerStateIDLE)
+	stateToChangeTo := PlayerStateIDLE
+	if rl.IsKeyPressed(rl.KeyD) || rl.IsKeyPressed(rl.KeyA) {
+		stateToChangeTo = PlayerStateRUNNING
 	}
+	r.p.ChangeState(stateToChangeTo)
 }
 
 type Jumping struct {
@@ -60,7 +70,6 @@ func (j *Jumping) Physics(dt float64) {
 		j.p.body.Velocity.X = -PlayerVelocity * .3
 	}
 	j.p.body.Velocity.Y = -PlayerVelocity * 4
-	fmt.Println(j.p.body.Velocity.Y)
 }
 
 // Update implements state.State.
