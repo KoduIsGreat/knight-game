@@ -15,7 +15,7 @@ func main() {
 
 }
 func run() error {
-	g := game.NewGame("Knight Game", game.Resolution{Width: 1280, Height: 720})
+	g := game.NewGame("Knight Game")
 	p := player.NewPlayer()
 	g.AddComponent(p)
 

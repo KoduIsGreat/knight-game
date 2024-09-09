@@ -8,6 +8,16 @@ import (
 	"github.com/gofrs/uuid"
 )
 
+const (
+	ScreenHeight = 720
+	ScreenWidth  = 1280
+	TargetFPS    = 60
+)
+
+var (
+	BackgroundColor = rl.RayWhite
+)
+
 type Game interface {
 	Init()
 	AddComponent(c Component)
@@ -15,16 +25,14 @@ type Game interface {
 }
 
 type game struct {
-	Title string
-	Fps   float64
-	Resolution
+	Title      string
 	components []Component
+	Camera     rl.Camera2D
 }
 
 type Component interface {
 	Update(dt float64)
 	Render()
-	Physics(dt float64)
 	AddChild(c Component)
 	GetChildren() []Component
 	Destroy()
@@ -35,23 +43,18 @@ type BaseComponent struct {
 	Children []Component
 }
 
-type Resolution struct {
-	Width  int32
-	Height int32
-}
-
 type Option func(g *game)
 
-func NewGame(title string, r Resolution) Game {
-	g := &game{Title: title, Resolution: r}
+func NewGame(title string) Game {
+	g := &game{Title: title}
 	g.Init()
 	return g
 }
 
 func (g *game) Init() {
-	rl.InitWindow(g.Resolution.Width, g.Resolution.Height, g.Title)
-	physics.Init()
-	rl.SetTargetFPS(60)
+	rl.InitWindow(ScreenWidth, ScreenHeight, g.Title)
+	// physics.Init()
+	rl.SetTargetFPS(TargetFPS)
 }
 
 func (g *game) AddComponent(c Component) {
@@ -65,10 +68,11 @@ func (g *game) Process() {
 		for _, c := range g.components {
 			ct := time.Now()
 			c.Update(since.Seconds())
-			c.Physics(since.Seconds())
 			rl.BeginDrawing()
-			rl.ClearBackground(rl.RayWhite)
+			rl.BeginMode2D(g.Camera)
+			rl.ClearBackground(BackgroundColor)
 			c.Render()
+			rl.EndMode2D()
 			rl.EndDrawing()
 			since = time.Since(ct)
 		}

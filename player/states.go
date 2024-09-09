@@ -4,7 +4,6 @@ import (
 	"fmt"
 
 	"github.com/KoduIsGreat/knight-game/controls"
-	. "github.com/KoduIsGreat/knight-game/state"
 	rl "github.com/gen2brain/raylib-go/raylib"
 )
 
@@ -38,8 +37,6 @@ func (r *Running) Physics(dt float64) {
 	if rl.IsKeyDown(rl.KeyD) {
 		r.p.body.Velocity.X = PlayerVelocity
 		r.p.body.Position.X += r.p.body.Velocity.X
-		fmt.Println("velocity ", r.p.body.Velocity.X)
-		fmt.Println("position ", r.p.body.Position.X)
 	} else if rl.IsKeyDown(rl.KeyA) {
 		r.p.body.Velocity.X = -PlayerVelocity
 		r.p.body.Position.X -= r.p.body.Velocity.X
@@ -69,7 +66,8 @@ func (j *Jumping) Physics(dt float64) {
 	} else if rl.IsKeyDown(controls.MOVE_LEFT) {
 		j.p.body.Velocity.X = -PlayerVelocity * .3
 	}
-	j.p.body.Velocity.Y = -PlayerVelocity * 4
+	j.p.body.Velocity.Y = -PlayerVelocity
+	j.p.body.Position.Y += j.p.body.Velocity.Y
 }
 
 // Update implements state.State.
@@ -89,6 +87,11 @@ func (f *Falling) Physics(dt float64) {
 
 // Update implements state.State.
 func (f *Falling) Update(dt float64) {
+}
+
+type State interface {
+	Update(dt float64)
+	Physics(dt float64)
 }
 
 var _ State = &Idle{}

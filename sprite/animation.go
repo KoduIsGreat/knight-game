@@ -1,8 +1,6 @@
 package sprite
 
 import (
-	"fmt"
-
 	rl "github.com/gen2brain/raylib-go/raylib"
 )
 
@@ -14,11 +12,15 @@ const (
 type Sprite2dAnimator struct {
 	SpriteSheet   rl.Texture2D
 	NumFrames     float32
-	pos           *rl.Vector2
+	Pos           *rl.Vector2
 	speed         int
 	currentFrame  float32
 	frameRec      rl.Rectangle
 	framesCounter int
+}
+
+func (s *Sprite2dAnimator) SetSpeed(speed int) {
+	s.speed = speed
 }
 
 type Option func(s *Sprite2dAnimator)
@@ -27,7 +29,7 @@ func NewSprite2dAnimator(spriteSheet rl.Texture2D, numFrames float32, pos *rl.Ve
 	return &Sprite2dAnimator{
 		SpriteSheet:   spriteSheet,
 		NumFrames:     numFrames,
-		pos:           pos,
+		Pos:           pos,
 		frameRec:      rl.NewRectangle(pos.X, pos.Y, float32(spriteSheet.Width/int32(numFrames)), float32(spriteSheet.Height)),
 		speed:         3,
 		framesCounter: 0,
@@ -36,28 +38,6 @@ func NewSprite2dAnimator(spriteSheet rl.Texture2D, numFrames float32, pos *rl.Ve
 
 func (s *Sprite2dAnimator) Destroy() {
 	rl.UnloadTexture(s.SpriteSheet)
-}
-
-func (s *Sprite2dAnimator) Update2(dt float64) {
-	fmt.Println("frameCounter", s.framesCounter)
-	s.framesCounter++
-	if s.framesCounter >= (60 / s.speed) {
-
-		s.framesCounter = 0
-		s.currentFrame++
-
-		if s.currentFrame > s.NumFrames-1 {
-			s.currentFrame = 0
-		}
-
-		s.frameRec.X = s.currentFrame * float32(s.SpriteSheet.Width) / (s.NumFrames)
-	}
-	if s.speed > maxFrameSpeed {
-		s.speed = maxFrameSpeed
-	} else if s.speed < minFrameSpeed {
-		s.speed = minFrameSpeed
-	}
-	fmt.Println("speed", s.speed)
 }
 
 func (s *Sprite2dAnimator) Update(dt float64) {
@@ -83,6 +63,5 @@ func (s *Sprite2dAnimator) Update(dt float64) {
 }
 
 func (s *Sprite2dAnimator) Render() {
-	// log.Println("render pos x, y", s.pos.X, s.pos.Y)
-	rl.DrawTextureRec(s.SpriteSheet, s.frameRec, *s.pos, rl.White) // Draw part of the texture
+	rl.DrawTextureRec(s.SpriteSheet, s.frameRec, *s.Pos, rl.White) // Draw part of the texture
 }
