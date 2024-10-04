@@ -3,7 +3,8 @@ package main
 import (
 	"fmt"
 
-	"github.com/KoduIsGreat/knight-game/networking/server"
+	"github.com/KoduIsGreat/knight-game/nw"
+	"github.com/KoduIsGreat/knight-game/state/snake"
 )
 
 func main() {
@@ -13,7 +14,7 @@ func main() {
 }
 
 func run() error {
-	fmt.Println("Server started on :1111")
-	s := server.NewServer("udp", ":1111")
+	sm := snake.NewServerStateManager()
+	s := nw.NewServer(sm)
 	return s.Listen()
 }
