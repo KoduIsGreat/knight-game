@@ -10,3 +10,7 @@ type ServerStateMessage struct {
 	GameState       GameState         `json:"gameState"`
 	AcknowledgedSeq map[string]uint32 `json:"acknowledgedSeq"`
 }
+
+type ServerMessage struct {
+	Type string `json:"type"`
+}

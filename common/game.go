@@ -1,8 +1,6 @@
 package common
 
 import (
-	"encoding/json"
-
 	rl "github.com/gen2brain/raylib-go/raylib"
 )
 
@@ -25,8 +23,4 @@ type GameState struct {
 	Snakes    map[string]*Snake `json:"snakes"`
 	FoodItems []FoodItem        `json:"foodItems"`
 	World     rl.Rectangle
-}
-
-func (s GameState) Serialize() ([]byte, error) {
-	return json.Marshal(s)
 }

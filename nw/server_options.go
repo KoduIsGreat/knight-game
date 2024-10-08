@@ -6,25 +6,25 @@ import (
 	"time"
 )
 
-type ServerOption func(*Server)
+type ServerOption[T any] func(*Server[T])
 
-func WithLogger(log *log.Logger) ServerOption {
-	return func(s *Server) {
+func WithLogger[T any](log *log.Logger) ServerOption[T] {
+	return func(s *Server[T]) {
 		s.log = log
 	}
 }
-func WithTickRate(rate time.Duration) ServerOption {
-	return func(s *Server) {
+func WithTickRate[T any](rate time.Duration) ServerOption[T] {
+	return func(s *Server[T]) {
 		s.tickRate = rate
 	}
 }
-func WithStateManager(sm StateManager) ServerOption {
-	return func(s *Server) {
+func WithStateManager[T any](sm StateManager[T]) ServerOption[T] {
+	return func(s *Server[T]) {
 		s.state = sm
 	}
 }
-func WithTLSConfig(tlsConfig *tls.Config) ServerOption {
-	return func(s *Server) {
+func WithTLSConfig[T any](tlsConfig *tls.Config) ServerOption[T] {
+	return func(s *Server[T]) {
 		s.tlsConfig = tlsConfig
 	}
 }

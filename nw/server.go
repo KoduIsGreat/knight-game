@@ -14,13 +14,13 @@ import (
 	quic "github.com/quic-go/quic-go"
 )
 
-type Server struct {
+type Server[T any] struct {
 	address string
 
 	tlsConfig  *tls.Config
 	quicConfig *quic.Config
 
-	state StateManager
+	state StateManager[T]
 	// defines the Tick of the server
 	tickRate time.Duration
 	log      *log.Logger
@@ -78,6 +78,9 @@ func (c *client) reader(removedClients chan *client, clientInputs chan ClientInp
 			log.Println("Client disconnected:", err)
 			return
 		}
+		if buf[0] == 'j' {
+			continue
+		}
 
 		var inputMsg struct {
 			Sequence uint32 `json:"sequence"`
@@ -98,14 +101,14 @@ func (c *client) reader(removedClients chan *client, clientInputs chan ClientInp
 	}
 }
 
-func NewServer(sm StateManager, opts ...ServerOption) *Server {
+func NewServer[T any](sm StateManager[T], opts ...ServerOption[T]) *Server[T] {
 	log := log.New(os.Stdout, "server: ", log.Lshortfile)
 
 	tlsConfig := &tls.Config{
 		Certificates: []tls.Certificate{GenerateSelfSignedTLSCertificate()},
 		NextProtos:   []string{"snake-game"},
 	}
-	s := &Server{
+	s := &Server[T]{
 		address:           address,
 		tlsConfig:         tlsConfig,
 		quicConfig:        &quic.Config{},
@@ -127,7 +130,7 @@ func NewServer(sm StateManager, opts ...ServerOption) *Server {
 }
 
 // StartServer starts a QUIC server and listens for client connections.
-func (s *Server) Listen() error {
+func (s *Server[T]) Listen() error {
 
 	// Listen on a QUIC address
 	listener, err := quic.ListenAddr(s.address, s.tlsConfig, nil)
@@ -149,7 +152,7 @@ func (s *Server) Listen() error {
 }
 
 // handleClient handles individual client connections
-func (s *Server) handleClient(conn quic.Connection) {
+func (s *Server[T]) handleClient(conn quic.Connection) {
 	clientID := conn.RemoteAddr().String()
 	fmt.Println("New client connected:", clientID)
 
@@ -169,21 +172,40 @@ func (s *Server) handleClient(conn quic.Connection) {
 	}
 
 	// Add the client to the server
-	fmt.Println("Adding client to server")
-	s.newClients <- client
 	go client.writer()
 	go client.reader(s.removeClients, s.clientInputs)
+	s.newClients <- client
 }
 
-func (s *Server) gameLoop() {
+func (s *Server[T]) sendJoinMsg(client *client) {
+	joinMsg := struct {
+		ClientID string `json:"clientID"`
+	}{
+		ClientID: client.ID,
+	}
+	data, err := json.Marshal(joinMsg)
+	if err != nil {
+		log.Println("Error marshaling join message:", err)
+		return
+	}
+	message := string(data) + "\n"
+
+	fmt.Println("Sending join message to client:", message)
+	client.sendChan <- message
+}
+
+func (s *Server[T]) gameLoop() {
 	ticker := time.NewTicker(s.tickRate)
 	defer ticker.Stop()
 	for {
 		select {
 		case client := <-s.newClients:
+			fmt.Printf("Adding client %s to server\n", client.ID)
 			s.clients[client.ID] = client
 			s.state.InitClientEntity(client.ID)
+			s.sendJoinMsg(client)
 			s.clientInputQueues[client.ID] = []ClientInput{}
+			broadcastGameState(s.state.Get(), s.clients)
 		case client := <-s.removeClients:
 			s.state.RemoveClientEntity(client.ID)
 			delete(s.clientInputQueues, client.ID)
@@ -202,7 +224,7 @@ func (s *Server) gameLoop() {
 	}
 }
 
-func (s *Server) processInputs() {
+func (s *Server[T]) processInputs() {
 	for clientID, queue := range s.clientInputQueues {
 		client := s.clients[clientID]
 		sort.Slice(queue, func(i, j int) bool {

@@ -1,9 +1,11 @@
 package snake
 
 import (
+	"fmt"
 	"math/rand"
 
 	. "github.com/KoduIsGreat/knight-game/common"
+	"github.com/KoduIsGreat/knight-game/nw"
 	rl "github.com/gen2brain/raylib-go/raylib"
 )
 
@@ -16,13 +18,16 @@ func NewServerStateManager() *ServerStateManager {
 	world := rl.NewRectangle(0, 0, 600, 600)
 	foodItems := generateRandomFoodItems(40, world)
 	return &ServerStateManager{
-		state: GameState{World: world,
+		state: GameState{
+			World:     world,
 			Snakes:    make(map[string]*Snake),
 			FoodItems: foodItems,
 		},
 		clientInputQueues: make(map[string][]ClientInput),
 	}
 }
+
+var _ nw.StateManager[GameState] = &ServerStateManager{}
 
 // generate food items within the world bounds
 func generateRandomFoodItems(num int, world rl.Rectangle) []FoodItem {
@@ -82,13 +87,13 @@ func (s *ServerStateManager) RemoveClientEntity(clientId string) {
 
 func updateGameState(gameState GameState) {
 	for _, snake := range gameState.Snakes {
-		moveSnake(snake, int(gameState.World.ToInt32().Width), int(gameState.World.ToInt32().Height), gameState.FoodItems)
+		moveSnake(snake, int(gameState.World.ToInt32().Width), int(gameState.World.ToInt32().Height), gameState.FoodItems, gameState.Snakes)
 	}
 }
 
 // move snake but respect world bounds
 // expand snake by adding a new tail if it eats food
-func moveSnake(snake *Snake, worldWidth, worldHeight int, foodItems []FoodItem) {
+func moveSnake(snake *Snake, worldWidth, worldHeight int, foodItems []FoodItem, allSnakes map[string]*Snake) {
 	head := snake.Segments[0]
 	newHead := head
 
@@ -114,6 +119,30 @@ func moveSnake(snake *Snake, worldWidth, worldHeight int, foodItems []FoodItem) 
 	} else if newHead.Y >= worldHeight/10 {
 		newHead.Y = 0
 	}
+	fmt.Println("newHead: ", newHead)
+
+	// Check for self-collision
+	if snakeCollidesWithSelf(snake, newHead) {
+		respawnSnake(snake, worldWidth, worldHeight)
+		return
+	}
+
+	// Check for collision with other snakes
+	for _, otherSnake := range allSnakes {
+		if otherSnake.ID != snake.ID {
+			if snakeCollidesWithOther(newHead, otherSnake) {
+				if len(snake.Segments) > len(otherSnake.Segments) {
+					// Eat the smaller snake
+					snake.Segments = append(snake.Segments, otherSnake.Segments...)
+					respawnSnake(otherSnake, worldWidth, worldHeight)
+				} else {
+					// Die and respawn
+					respawnSnake(snake, worldWidth, worldHeight)
+					return
+				}
+			}
+		}
+	}
 
 	// check if snake eats food
 	for i, food := range foodItems {
@@ -128,4 +157,30 @@ func moveSnake(snake *Snake, worldWidth, worldHeight int, foodItems []FoodItem) 
 
 	snake.Segments = append([]Position{newHead}, snake.Segments...)
 	snake.Segments = snake.Segments[:len(snake.Segments)-1]
+}
+
+func snakeCollidesWithSelf(snake *Snake, newHead Position) bool {
+	for _, segment := range snake.Segments[1:] {
+		if newHead == segment {
+			return true
+		}
+	}
+	return false
+}
+
+func snakeCollidesWithOther(newHead Position, otherSnake *Snake) bool {
+	for _, segment := range otherSnake.Segments {
+		if newHead == segment {
+			return true
+		}
+	}
+	return false
+}
+
+func respawnSnake(snake *Snake, worldWidth, worldHeight int) {
+	snake.Segments = []Position{{
+		X: rand.Intn(worldWidth / 10),
+		Y: rand.Intn(worldHeight / 10),
+	}}
+	snake.Direction = "RIGHT"
 }
