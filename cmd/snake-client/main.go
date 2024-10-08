@@ -263,19 +263,6 @@ func (c *Client) updateGameState() {
 	snake, exists := c.gameState.Snakes[c.clientID]
 	if exists {
 		moveSnake(snake)
-
-		// Smoothly interpolate camera position
-		if len(snake.Segments) > 0 {
-			head := snake.Segments[0]
-			targetX := float32(head.X*10 + 5)
-			targetY := float32(head.Y*10 + 5)
-
-			// Interpolate camera target position
-			c.cameraTarget.X += (targetX - c.cameraTarget.X) * 0.1
-			c.cameraTarget.Y += (targetY - c.cameraTarget.Y) * 0.1
-
-			c.camera.Target = c.cameraTarget
-		}
 	}
 }
 

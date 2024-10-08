@@ -47,6 +47,7 @@ func (c *Client[T]) State() ClientStateManager[T] {
 }
 
 func (c *Client[T]) SendInputToServer(input string) {
+	fmt.Println("Sending input:", input)
 	msg := ClientInput{
 		ClientID: c.clientID,
 		Sequence: c.inputSequence,

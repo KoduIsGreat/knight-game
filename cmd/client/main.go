@@ -10,8 +10,8 @@ import (
 )
 
 const (
-	windowWidth  = 800
-	windowHeight = 600
+	windowWidth  = 1200
+	windowHeight = 1000
 )
 
 func main() {
@@ -28,9 +28,17 @@ type Game struct {
 
 func (g *Game) renderGameState() {
 	rl.BeginDrawing()
-	rl.ClearBackground(rl.RayWhite)
 	rl.BeginMode2D(g.camera)
+	rl.ClearBackground(rl.RayWhite)
 	state := g.client.State().GetCurrent()
+
+	rl.DrawRectangleLines(
+		state.World.ToInt32().X,
+		state.World.ToInt32().Y,
+		state.World.ToInt32().Width,
+		state.World.ToInt32().Height,
+		rl.Black,
+	)
 
 	for _, snake := range state.Snakes {
 		color := rl.Green
@@ -80,17 +88,15 @@ func (g *Game) Loop() {
 
 func (g *Game) handleInput() {
 	var input string
-	if rl.IsKeyPressed(rl.KeyUp) {
+	if rl.IsKeyPressed(rl.KeyW) {
 		input = "UP"
-	} else if rl.IsKeyPressed(rl.KeyDown) {
+	} else if rl.IsKeyPressed(rl.KeyS) {
 		input = "DOWN"
-	} else if rl.IsKeyPressed(rl.KeyLeft) {
+	} else if rl.IsKeyPressed(rl.KeyA) {
 		input = "LEFT"
-	} else if rl.IsKeyPressed(rl.KeyRight) {
+	} else if rl.IsKeyPressed(rl.KeyD) {
 		input = "RIGHT"
 	}
-	fmt.Println("input", input)
-
 	if rl.IsKeyPressed(rl.KeyEqual) || rl.IsKeyPressed(rl.KeyKpAdd) {
 		g.camera.Zoom += 0.1
 	}
@@ -100,20 +106,20 @@ func (g *Game) handleInput() {
 			g.camera.Zoom = 0.1
 		}
 	}
-	if rl.IsKeyPressed(rl.KeyA) {
+	if rl.IsKeyDown(rl.KeyLeft) {
 		g.camera.Target.X -= 10
 	}
-	if rl.IsKeyPressed(rl.KeyD) {
+	if rl.IsKeyDown(rl.KeyRight) {
 		g.camera.Target.X += 10
 	}
-	if rl.IsKeyPressed(rl.KeyW) {
+	if rl.IsKeyDown(rl.KeyDown) {
 		g.camera.Target.Y -= 10
 	}
-	if rl.IsKeyPressed(rl.KeyS) {
+	if rl.IsKeyDown(rl.KeyUp) {
 		g.camera.Target.Y += 10
 	}
+
 	if input != "" {
-		fmt.Println("simulating locally", input)
 		g.client.State().UpdateLocal(input)
 		g.client.SendInputToServer(input)
 	}

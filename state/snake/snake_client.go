@@ -1,7 +1,7 @@
 package snake
 
 import (
-	"fmt"
+	"encoding/json"
 	"time"
 
 	. "github.com/KoduIsGreat/knight-game/common"
@@ -83,7 +83,7 @@ func (s *ClientStateManager) ReconcileState(serverMessage ServerStateMessage) {
 // updateLocalGameState updates the client's local game state.
 func (s *ClientStateManager) UpdateLocal(input string) {
 	s.inputSequence++
-	fmt.Printf("client id %s\nsequence %d\n", s.clientID, s.inputSequence)
+	// fmt.Printf("client id %s\nsequence %d\n", s.clientID, s.inputSequence)
 	snake, exists := s.currentState.Snakes[s.clientID]
 	if !exists {
 		// Initialize snake if not exists
@@ -111,6 +111,11 @@ func (s *ClientStateManager) UpdateLocal(input string) {
 	s.stateHistory[s.inputSequence] = s.currentState
 }
 
+func jsonPrettyState(gs any) []byte {
+	b, _ := json.MarshalIndent(gs, "", "  ")
+	return b
+}
+
 // updateGameState updates the local game state, including interpolation.
 func (s *ClientStateManager) Update(dt float64) {
 	// Interpolation
@@ -127,10 +132,11 @@ func (s *ClientStateManager) Update(dt float64) {
 		s.currentState = *s.targetState
 		s.targetState = nil
 	}
+	// log.Printf("currentState: %s\n", jsonPrettyState(s.currentState.Snakes[s.clientID]))
 
 	// Move the client's snake
 	snake, exists := s.currentState.Snakes[s.clientID]
-	fmt.Println("snakeExists: ", exists, s.clientID)
+	// fmt.Println("snakeExists: ", exists, s.clientID)
 	if exists {
 		moveSnake(snake, int(s.currentState.World.ToInt32().Width), int(s.currentState.World.ToInt32().Height), s.currentState.FoodItems, s.currentState.Snakes)
 	}

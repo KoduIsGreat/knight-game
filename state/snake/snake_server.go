@@ -65,10 +65,8 @@ func (s *ServerStateManager) ApplyInputToState(ci ClientInput) {
 	}
 	input := ci.Input
 
-	if input == "UP" || input == "DOWN" || input == "LEFT" || input == "RIGHT" {
-		if snake.Direction != oppositeDirections[input] {
-			snake.Direction = input
-		}
+	if snake.Direction != oppositeDirections[input] {
+		snake.Direction = input
 	}
 }
 
@@ -119,8 +117,6 @@ func moveSnake(snake *Snake, worldWidth, worldHeight int, foodItems []FoodItem, 
 	} else if newHead.Y >= worldHeight/10 {
 		newHead.Y = 0
 	}
-	fmt.Println("newHead: ", newHead)
-
 	// Check for self-collision
 	if snakeCollidesWithSelf(snake, newHead) {
 		respawnSnake(snake, worldWidth, worldHeight)
@@ -178,9 +174,10 @@ func snakeCollidesWithOther(newHead Position, otherSnake *Snake) bool {
 }
 
 func respawnSnake(snake *Snake, worldWidth, worldHeight int) {
+	fmt.Printf("width %d, height %d\n", worldWidth, worldHeight)
 	snake.Segments = []Position{{
-		X: rand.Intn(worldWidth / 10),
-		Y: rand.Intn(worldHeight / 10),
+		X: 10,
+		Y: 10,
 	}}
 	snake.Direction = "RIGHT"
 }
