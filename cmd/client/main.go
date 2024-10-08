@@ -89,6 +89,7 @@ func (g *Game) handleInput() {
 	} else if rl.IsKeyPressed(rl.KeyRight) {
 		input = "RIGHT"
 	}
+	fmt.Println("input", input)
 
 	if rl.IsKeyPressed(rl.KeyEqual) || rl.IsKeyPressed(rl.KeyKpAdd) {
 		g.camera.Zoom += 0.1
