@@ -14,6 +14,7 @@ type ClientStateManager[T any] interface {
 	Update(dt float64)
 	ReconcileState(msg common.ServerStateMessage)
 	UpdateLocal(input string)
+	InputSeq() uint32
 	GetCurrent() T
 	GetTarget() *T
 	SetClientID(string)

@@ -1,5 +1,7 @@
 package common
 
+import "io"
+
 type ClientInput struct {
 	ClientID string
 	Input    string
@@ -11,6 +13,17 @@ type ServerStateMessage struct {
 	AcknowledgedSeq map[string]uint32 `json:"acknowledgedSeq"`
 }
 
-type ServerMessage struct {
-	Type string `json:"type"`
+const (
+	NetworkMessageJoin  byte = 'J'
+	NetworkMessageState byte = 'S'
+)
+
+type NetworkMessageEncoder interface {
+	Encode() []byte
+	EncodeTo(io.Writer) error
+}
+
+type NetworkMessageDecoder interface {
+	Decode([]byte, any) error
+	DecodeFrom(io.Reader, any) error
 }

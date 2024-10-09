@@ -31,21 +31,15 @@ func (g *Game) renderGameState() {
 	rl.BeginMode2D(g.camera)
 	rl.ClearBackground(rl.RayWhite)
 	state := g.client.State().GetCurrent()
-
-	rl.DrawRectangleLines(
-		state.World.ToInt32().X,
-		state.World.ToInt32().Y,
-		state.World.ToInt32().Width,
-		state.World.ToInt32().Height,
-		rl.Black,
-	)
+	clientId := g.client.State().ClientID()
 
 	for _, snake := range state.Snakes {
 		color := rl.Green
-		if snake.ID == g.client.State().ClientID() {
+		if snake.ID == clientId {
 			color = rl.Blue
 		}
 		for _, segment := range snake.Segments {
+			// log.Printf("Client:%s Drawing segment at (%d,%d)", clientId, segment.X, segment.Y)
 			rl.DrawRectangle(
 				int32(segment.X*10),
 				int32(segment.Y*10),
@@ -106,16 +100,16 @@ func (g *Game) handleInput() {
 			g.camera.Zoom = 0.1
 		}
 	}
-	if rl.IsKeyDown(rl.KeyLeft) {
+	if rl.IsKeyPressed(rl.KeyLeft) {
 		g.camera.Target.X -= 10
 	}
-	if rl.IsKeyDown(rl.KeyRight) {
+	if rl.IsKeyPressed(rl.KeyRight) {
 		g.camera.Target.X += 10
 	}
-	if rl.IsKeyDown(rl.KeyDown) {
+	if rl.IsKeyPressed(rl.KeyDown) {
 		g.camera.Target.Y -= 10
 	}
-	if rl.IsKeyDown(rl.KeyUp) {
+	if rl.IsKeyPressed(rl.KeyUp) {
 		g.camera.Target.Y += 10
 	}
 
@@ -142,6 +136,7 @@ func run() error {
 	g := Game{
 		client: nw.NewClient(sm),
 	}
+	g.initializeCamera()
 	g.Loop()
 
 	return nil

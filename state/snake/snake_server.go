@@ -1,7 +1,6 @@
 package snake
 
 import (
-	"fmt"
 	"math/rand"
 
 	. "github.com/KoduIsGreat/knight-game/common"
@@ -72,6 +71,7 @@ func (s *ServerStateManager) ApplyInputToState(ci ClientInput) {
 
 func (s *ServerStateManager) InitClientEntity(clientID string) {
 	s.clientInputQueues[clientID] = make([]ClientInput, 0)
+
 	s.state.Snakes[clientID] = &Snake{
 		ID:        clientID,
 		Segments:  []Position{{X: 0, Y: 0}},
@@ -107,19 +107,23 @@ func moveSnake(snake *Snake, worldWidth, worldHeight int, foodItems []FoodItem, 
 	}
 
 	if newHead.X < 0 {
-		newHead.X = worldWidth/10 - 1
-	} else if newHead.X >= worldWidth/10 {
+		newHead.X = 600/10 - 1
+	} else if newHead.X >= 600/10 {
 		newHead.X = 0
 	}
 
 	if newHead.Y < 0 {
-		newHead.Y = worldHeight/10 - 1
-	} else if newHead.Y >= worldHeight/10 {
+		newHead.Y = 600/10 - 1
+	} else if newHead.Y >= 600/10 {
 		newHead.Y = 0
 	}
 	// Check for self-collision
 	if snakeCollidesWithSelf(snake, newHead) {
-		respawnSnake(snake, worldWidth, worldHeight)
+		snake.Segments = []Position{{
+			X: 1 + rand.Intn(600/10-2),
+			Y: 1 + rand.Intn(600/10-2),
+		}}
+		snake.Direction = "RIGHT"
 		return
 	}
 
@@ -130,10 +134,18 @@ func moveSnake(snake *Snake, worldWidth, worldHeight int, foodItems []FoodItem, 
 				if len(snake.Segments) > len(otherSnake.Segments) {
 					// Eat the smaller snake
 					snake.Segments = append(snake.Segments, otherSnake.Segments...)
-					respawnSnake(otherSnake, worldWidth, worldHeight)
+					snake.Segments = []Position{{
+						X: 1 + rand.Intn(600/10-2),
+						Y: 1 + rand.Intn(600/10-2),
+					}}
+					snake.Direction = "RIGHT"
 				} else {
 					// Die and respawn
-					respawnSnake(snake, worldWidth, worldHeight)
+					snake.Segments = []Position{{
+						X: 1 + rand.Intn(600/10-2),
+						Y: 1 + rand.Intn(600/10-2),
+					}}
+					snake.Direction = "RIGHT"
 					return
 				}
 			}
@@ -171,13 +183,4 @@ func snakeCollidesWithOther(newHead Position, otherSnake *Snake) bool {
 		}
 	}
 	return false
-}
-
-func respawnSnake(snake *Snake, worldWidth, worldHeight int) {
-	fmt.Printf("width %d, height %d\n", worldWidth, worldHeight)
-	snake.Segments = []Position{{
-		X: 10,
-		Y: 10,
-	}}
-	snake.Direction = "RIGHT"
 }

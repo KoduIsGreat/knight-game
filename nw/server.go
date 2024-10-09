@@ -190,7 +190,7 @@ func (s *Server[T]) sendJoinMsg(client *client) {
 	}
 	message := string(data) + "\n"
 
-	fmt.Println("Sending join message to client:", message)
+	fmt.Println("acking join message for client:", message)
 	client.sendChan <- message
 }
 

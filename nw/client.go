@@ -13,8 +13,7 @@ import (
 )
 
 type Client[T any] struct {
-	stream        quic.Stream
-	inputSequence uint32
+	stream quic.Stream
 	// sendChan is used to send messages to the server
 	sendChan chan []byte
 	// recvChan is used to receive messages from the server
@@ -50,7 +49,7 @@ func (c *Client[T]) SendInputToServer(input string) {
 	fmt.Println("Sending input:", input)
 	msg := ClientInput{
 		ClientID: c.clientID,
-		Sequence: c.inputSequence,
+		Sequence: c.state.InputSeq(),
 		Input:    input,
 	}
 	data, err := json.Marshal(msg)

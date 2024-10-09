@@ -56,13 +56,15 @@ func (s *ClientStateManager) SetClientID(clientId string) {
 func (s *ClientStateManager) ClientID() string {
 	return s.clientID
 }
+func (s *ClientStateManager) InputSeq() uint32 {
+	return s.inputSequence
+}
 
 // ReconcileGameState reconciles the client's game state with the server's game state.
 // It is called when the client receives a new server state message at the beginning of the frame
 func (s *ClientStateManager) ReconcileState(serverMessage ServerStateMessage) {
 	serverGameState := serverMessage.GameState
 	acknowledgedSeq := serverMessage.AcknowledgedSeq[s.clientID]
-
 	// Remove acknowledged inputs and states
 	for seq := range s.inputHistory {
 		if seq <= acknowledgedSeq {
@@ -70,20 +72,14 @@ func (s *ClientStateManager) ReconcileState(serverMessage ServerStateMessage) {
 			delete(s.stateHistory, seq)
 		}
 	}
-
-	// Compare server state with local predicted state
-	predictedState, exists := s.stateHistory[acknowledgedSeq]
-	if !exists || !compareGameStates(s.clientID, serverGameState, predictedState) {
-		// Discrepancy found, start interpolation
-		s.targetState = &serverGameState
-		s.interpolateUntil = time.Now().Add(interpolationTimeMs * time.Millisecond)
-	}
+	// Always set the target state and start interpolation
+	s.targetState = &serverGameState
+	s.interpolateUntil = time.Now().Add(interpolationTimeMs * time.Millisecond)
 }
 
 // updateLocalGameState updates the client's local game state.
 func (s *ClientStateManager) UpdateLocal(input string) {
 	s.inputSequence++
-	// fmt.Printf("client id %s\nsequence %d\n", s.clientID, s.inputSequence)
 	snake, exists := s.currentState.Snakes[s.clientID]
 	if !exists {
 		// Initialize snake if not exists
@@ -116,38 +112,47 @@ func jsonPrettyState(gs any) []byte {
 	return b
 }
 
-// updateGameState updates the local game state, including interpolation.
 func (s *ClientStateManager) Update(dt float64) {
-	// Interpolation
-	if s.targetState != nil && time.Now().Before(s.interpolateUntil) {
-		elapsed := float32(time.Since(s.interpolateUntil.Add(-interpolationTimeMs * time.Millisecond)).Milliseconds())
-		factor := elapsed / float32(interpolationTimeMs)
-		if factor > 1.0 {
-			factor = 1.0
-		} else if factor < 0.0 {
-			factor = 0.0
+	// Continuous interpolation
+	if s.targetState != nil {
+		now := time.Now()
+		if now.Before(s.interpolateUntil) {
+			elapsed := float32(now.Sub(s.interpolateUntil.Add(-interpolationTimeMs * time.Millisecond)).Seconds())
+			factor := elapsed / (float32(interpolationTimeMs) / 1000.0)
+			factor = clamp(factor, 0.0, 1.0)
+			s.currentState = s.interpolateStates(factor)
+		} else {
+			s.currentState = *s.targetState
+			s.targetState = nil
 		}
-		s.currentState = s.interpolateStates(factor)
-	} else if s.targetState != nil {
-		s.currentState = *s.targetState
-		s.targetState = nil
 	}
-	// log.Printf("currentState: %s\n", jsonPrettyState(s.currentState.Snakes[s.clientID]))
 
 	// Move the client's snake
 	snake, exists := s.currentState.Snakes[s.clientID]
-	// fmt.Println("snakeExists: ", exists, s.clientID)
 	if exists {
 		moveSnake(snake, int(s.currentState.World.ToInt32().Width), int(s.currentState.World.ToInt32().Height), s.currentState.FoodItems, s.currentState.Snakes)
 	}
 }
 
-func (s *ClientStateManager) interpolateStates(factor float32) GameState {
+func clamp(value, min, max float32) float32 {
+	if value < min {
+		return min
+	}
+	if value > max {
+		return max
+	}
+	return value
+}
 
+func (s *ClientStateManager) interpolateStates(factor float32) GameState {
 	interpolated := GameState{
 		Snakes:    make(map[string]*Snake),
-		FoodItems: s.targetState.FoodItems, // Assuming food positions don't need interpolation
+		FoodItems: s.targetState.FoodItems,
+		World:     s.targetState.World,
 	}
+
+	worldWidth := 600
+	worldHeight := 600
 
 	for id, snake := range s.targetState.Snakes {
 		currentSnake, exists := s.currentState.Snakes[id]
@@ -161,6 +166,7 @@ func (s *ClientStateManager) interpolateStates(factor float32) GameState {
 			Direction: snake.Direction,
 			Segments:  make([]Position, len(snake.Segments)),
 		}
+
 		for i := range snake.Segments {
 			var currentPos Position
 			if i < len(currentSnake.Segments) {
@@ -169,9 +175,14 @@ func (s *ClientStateManager) interpolateStates(factor float32) GameState {
 				currentPos = snake.Segments[i]
 			}
 
+			targetPos := snake.Segments[i]
+
+			interpolatedX := interpolateCoordinate(currentPos.X, targetPos.X, factor, worldWidth)
+			interpolatedY := interpolateCoordinate(currentPos.Y, targetPos.Y, factor, worldHeight)
+
 			interpolatedSnake.Segments[i] = Position{
-				X: int(lerp(float32(currentPos.X), float32(snake.Segments[i].X), factor)),
-				Y: int(lerp(float32(currentPos.Y), float32(snake.Segments[i].Y), factor)),
+				X: interpolatedX,
+				Y: interpolatedY,
 			}
 		}
 
@@ -181,25 +192,28 @@ func (s *ClientStateManager) interpolateStates(factor float32) GameState {
 	return interpolated
 }
 
+func interpolateCoordinate(current, target int, factor float32, worldSize int) int {
+	diff := target - current
+	if abs(diff) > worldSize/2 {
+		if diff > 0 {
+			diff -= worldSize
+		} else {
+			diff += worldSize
+		}
+	}
+
+	interpolated := int(lerp(float32(current), float32(current+diff), factor))
+	return (interpolated + worldSize) % worldSize
+}
+
+func abs(x int) int {
+	if x < 0 {
+		return -x
+	}
+	return x
+}
+
 // lerp performs linear interpolation between two values.
 func lerp(a, b, t float32) float32 {
 	return a + t*(b-a)
-}
-
-// compareGameStates compares two game states for the client's snake.
-func compareGameStates(clientID string, a, b GameState) bool {
-	snakeA, existsA := a.Snakes[clientID]
-	snakeB, existsB := b.Snakes[clientID]
-	if !existsA || !existsB {
-		return false
-	}
-	if len(snakeA.Segments) != len(snakeB.Segments) {
-		return false
-	}
-	for i := range snakeA.Segments {
-		if snakeA.Segments[i] != snakeB.Segments[i] {
-			return false
-		}
-	}
-	return true
 }
