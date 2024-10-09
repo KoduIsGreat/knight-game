@@ -20,9 +20,14 @@ func main() {
 	}
 }
 
+type Renderer[T any] interface {
+	Render(T)
+}
+
 type Game struct {
-	client       *nw.Client[common.GameState]
-	camera       rl.Camera2D
+	client *nw.Client[common.GameState]
+	camera rl.Camera2D
+
 	cameraTarget rl.Vector2
 }
 
@@ -39,7 +44,6 @@ func (g *Game) renderGameState() {
 			color = rl.Blue
 		}
 		for _, segment := range snake.Segments {
-			// log.Printf("Client:%s Drawing segment at (%d,%d)", clientId, segment.X, segment.Y)
 			rl.DrawRectangle(
 				int32(segment.X*10),
 				int32(segment.Y*10),

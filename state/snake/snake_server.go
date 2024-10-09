@@ -1,6 +1,7 @@
 package snake
 
 import (
+	"fmt"
 	"math/rand"
 
 	. "github.com/KoduIsGreat/knight-game/common"
@@ -14,8 +15,8 @@ type ServerStateManager struct {
 }
 
 func NewServerStateManager() *ServerStateManager {
-	world := rl.NewRectangle(0, 0, 600, 600)
-	foodItems := generateRandomFoodItems(40, world)
+	world := rl.NewRectangle(0, 0, 1000, 1000)
+	foodItems := spawnFoodItems(80, world)
 	return &ServerStateManager{
 		state: GameState{
 			World:     world,
@@ -29,16 +30,23 @@ func NewServerStateManager() *ServerStateManager {
 var _ nw.StateManager[GameState] = &ServerStateManager{}
 
 // generate food items within the world bounds
-func generateRandomFoodItems(num int, world rl.Rectangle) []FoodItem {
-	foodItems := make([]FoodItem, num)
-	for i := 0; i < num; i++ {
-		foodItems[i] = FoodItem{
-			Position: Position{
-				X: rand.Intn(int(world.Width) / 10),
-				Y: rand.Intn(int(world.Height) / 10),
-			},
+// ensure food items do not overlap with other food items
+func spawnFoodItems(num int, world rl.Rectangle) []FoodItem {
+	foodItems := make([]FoodItem, 0, num)
+	occupied := make(map[Position]bool)
+
+	for len(foodItems) < num {
+		position := Position{
+			X: rand.Intn(int(world.Width) / 10),
+			Y: rand.Intn(int(world.Height) / 10),
+		}
+
+		if !occupied[position] {
+			foodItems = append(foodItems, FoodItem{Position: position})
+			occupied[position] = true
 		}
 	}
+
 	return foodItems
 }
 
@@ -107,23 +115,20 @@ func moveSnake(snake *Snake, worldWidth, worldHeight int, foodItems []FoodItem, 
 	}
 
 	if newHead.X < 0 {
-		newHead.X = 600/10 - 1
-	} else if newHead.X >= 600/10 {
+		newHead.X = worldWidth/10 - 1
+	} else if newHead.X >= worldWidth/10 {
 		newHead.X = 0
 	}
 
 	if newHead.Y < 0 {
-		newHead.Y = 600/10 - 1
-	} else if newHead.Y >= 600/10 {
+		newHead.Y = worldHeight/10 - 1
+	} else if newHead.Y >= worldHeight/10 {
 		newHead.Y = 0
 	}
+	fmt.Printf("newHead: %v\n", newHead)
 	// Check for self-collision
 	if snakeCollidesWithSelf(snake, newHead) {
-		snake.Segments = []Position{{
-			X: 1 + rand.Intn(600/10-2),
-			Y: 1 + rand.Intn(600/10-2),
-		}}
-		snake.Direction = "RIGHT"
+		respawnSnake(snake, worldWidth, worldHeight)
 		return
 	}
 
@@ -134,18 +139,10 @@ func moveSnake(snake *Snake, worldWidth, worldHeight int, foodItems []FoodItem, 
 				if len(snake.Segments) > len(otherSnake.Segments) {
 					// Eat the smaller snake
 					snake.Segments = append(snake.Segments, otherSnake.Segments...)
-					snake.Segments = []Position{{
-						X: 1 + rand.Intn(600/10-2),
-						Y: 1 + rand.Intn(600/10-2),
-					}}
-					snake.Direction = "RIGHT"
+					respawnSnake(otherSnake, worldWidth, worldHeight)
 				} else {
 					// Die and respawn
-					snake.Segments = []Position{{
-						X: 1 + rand.Intn(600/10-2),
-						Y: 1 + rand.Intn(600/10-2),
-					}}
-					snake.Direction = "RIGHT"
+					respawnSnake(snake, worldWidth, worldHeight)
 					return
 				}
 			}
@@ -183,4 +180,12 @@ func snakeCollidesWithOther(newHead Position, otherSnake *Snake) bool {
 		}
 	}
 	return false
+}
+
+func respawnSnake(snake *Snake, worldWidth, worldHeight int) {
+	snake.Segments = []Position{{
+		X: 1 + rand.Intn(worldWidth/10-2),
+		Y: 1 + rand.Intn(worldHeight/10-2),
+	}}
+	snake.Direction = "RIGHT"
 }

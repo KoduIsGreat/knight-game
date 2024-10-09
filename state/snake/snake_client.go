@@ -72,9 +72,37 @@ func (s *ClientStateManager) ReconcileState(serverMessage ServerStateMessage) {
 			delete(s.stateHistory, seq)
 		}
 	}
-	// Always set the target state and start interpolation
+	// Set the target state and start interpolation
 	s.targetState = &serverGameState
 	s.interpolateUntil = time.Now().Add(interpolationTimeMs * time.Millisecond)
+
+	// Apply any unacknowledged inputs
+	for seq := acknowledgedSeq + 1; seq <= s.inputSequence; seq++ {
+		if input, ok := s.inputHistory[seq]; ok {
+			s.applyInput(s.targetState, input)
+		}
+	}
+}
+
+func (s *ClientStateManager) applyInput(state *GameState, input string) {
+	snake, exists := state.Snakes[s.clientID]
+	if !exists {
+		return
+	}
+
+	opposite := map[string]string{
+		"UP":    "DOWN",
+		"DOWN":  "UP",
+		"LEFT":  "RIGHT",
+		"RIGHT": "LEFT",
+	}
+
+	if input == "UP" || input == "DOWN" || input == "LEFT" || input == "RIGHT" {
+		if snake.Direction != opposite[input] {
+			snake.Direction = input
+		}
+	}
+	moveSnake(snake, int(state.World.ToInt32().Width), int(state.World.ToInt32().Height), state.FoodItems, state.Snakes)
 }
 
 // updateLocalGameState updates the client's local game state.
@@ -113,10 +141,12 @@ func jsonPrettyState(gs any) []byte {
 }
 
 func (s *ClientStateManager) Update(dt float64) {
+	isInterpolating := false
 	// Continuous interpolation
 	if s.targetState != nil {
 		now := time.Now()
 		if now.Before(s.interpolateUntil) {
+			isInterpolating = true
 			elapsed := float32(now.Sub(s.interpolateUntil.Add(-interpolationTimeMs * time.Millisecond)).Seconds())
 			factor := elapsed / (float32(interpolationTimeMs) / 1000.0)
 			factor = clamp(factor, 0.0, 1.0)
@@ -127,10 +157,12 @@ func (s *ClientStateManager) Update(dt float64) {
 		}
 	}
 
-	// Move the client's snake
-	snake, exists := s.currentState.Snakes[s.clientID]
-	if exists {
-		moveSnake(snake, int(s.currentState.World.ToInt32().Width), int(s.currentState.World.ToInt32().Height), s.currentState.FoodItems, s.currentState.Snakes)
+	// Move the client's snake only if we're not interpolating
+	if !isInterpolating {
+		snake, exists := s.currentState.Snakes[s.clientID]
+		if exists {
+			moveSnake(snake, int(s.currentState.World.ToInt32().Width), int(s.currentState.World.ToInt32().Height), s.currentState.FoodItems, s.currentState.Snakes)
+		}
 	}
 }
 
