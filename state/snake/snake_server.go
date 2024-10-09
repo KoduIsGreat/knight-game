@@ -1,7 +1,6 @@
 package snake
 
 import (
-	"fmt"
 	"math/rand"
 
 	. "github.com/KoduIsGreat/knight-game/common"
@@ -125,7 +124,6 @@ func moveSnake(snake *Snake, worldWidth, worldHeight int, foodItems []FoodItem, 
 	} else if newHead.Y >= worldHeight/10 {
 		newHead.Y = 0
 	}
-	fmt.Printf("newHead: %v\n", newHead)
 	// Check for self-collision
 	if snakeCollidesWithSelf(snake, newHead) {
 		respawnSnake(snake, worldWidth, worldHeight)
