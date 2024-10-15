@@ -27,7 +27,7 @@ func newGameState() GameState {
 	return GameState{
 		Snakes:    make(map[string]*Snake),
 		FoodItems: []FoodItem{},
-		World:     rl.NewRectangle(0, 0, 600, 600),
+		World:     rl.NewRectangle(0, 0, 1000, 1000),
 	}
 }
 
