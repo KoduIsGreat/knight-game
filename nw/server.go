@@ -10,7 +10,6 @@ import (
 	"sort"
 	"time"
 
-	. "github.com/KoduIsGreat/knight-game/common"
 	quic "github.com/quic-go/quic-go"
 )
 
@@ -33,8 +32,14 @@ type Server[T any] struct {
 	clientInputQueues map[string][]ClientInput
 }
 
-type serverStateMessage struct {
-	GameState       any
+type ClientInput struct {
+	ClientID string
+	Input    string
+	Sequence uint32
+}
+
+type ServerStateMessage[T any] struct {
+	GameState       T
 	AcknowledgedSeq map[string]uint32
 }
 
@@ -205,7 +210,7 @@ func (s *Server[T]) gameLoop() {
 			s.state.InitClientEntity(client.ID)
 			s.sendJoinMsg(client)
 			s.clientInputQueues[client.ID] = []ClientInput{}
-			broadcastGameState(s.state.Get(), s.clients)
+			s.broadcastGameState(s.state.Get(), s.clients)
 		case client := <-s.removeClients:
 			s.state.RemoveClientEntity(client.ID)
 			delete(s.clientInputQueues, client.ID)
@@ -219,7 +224,7 @@ func (s *Server[T]) gameLoop() {
 		case <-ticker.C:
 			s.processInputs()
 			s.state.Update(s.tickRate.Seconds())
-			broadcastGameState(s.state.Get(), s.clients)
+			s.broadcastGameState(s.state.Get(), s.clients)
 		}
 	}
 }
@@ -245,13 +250,13 @@ func (s *Server[T]) processInputs() {
 	}
 }
 
-func broadcastGameState(gameState any, clients map[string]*client) {
+func (s *Server[T]) broadcastGameState(gameState T, clients map[string]*client) {
 	ackSeq := make(map[string]uint32)
 	for clientID, client := range clients {
 		ackSeq[clientID] = client.lastSequence
 	}
 
-	serverMessage := serverStateMessage{
+	serverMessage := ServerStateMessage[T]{
 		GameState:       gameState,
 		AcknowledgedSeq: ackSeq,
 	}

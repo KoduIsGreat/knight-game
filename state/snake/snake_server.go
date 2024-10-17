@@ -1,16 +1,13 @@
 package snake
 
 import (
-	"math/rand"
-
-	. "github.com/KoduIsGreat/knight-game/common"
 	"github.com/KoduIsGreat/knight-game/nw"
 	rl "github.com/gen2brain/raylib-go/raylib"
 )
 
 type ServerStateManager struct {
 	state             GameState
-	clientInputQueues map[string][]ClientInput
+	clientInputQueues map[string][]nw.ClientInput
 }
 
 func NewServerStateManager() *ServerStateManager {
@@ -22,32 +19,11 @@ func NewServerStateManager() *ServerStateManager {
 			Snakes:    make(map[string]*Snake),
 			FoodItems: foodItems,
 		},
-		clientInputQueues: make(map[string][]ClientInput),
+		clientInputQueues: make(map[string][]nw.ClientInput),
 	}
 }
 
 var _ nw.StateManager[GameState] = &ServerStateManager{}
-
-// generate food items within the world bounds
-// ensure food items do not overlap with other food items
-func spawnFoodItems(num int, world rl.Rectangle) []FoodItem {
-	foodItems := make([]FoodItem, 0, num)
-	occupied := make(map[Position]bool)
-
-	for len(foodItems) < num {
-		position := Position{
-			X: rand.Intn(int(world.Width) / 10),
-			Y: rand.Intn(int(world.Height) / 10),
-		}
-
-		if !occupied[position] {
-			foodItems = append(foodItems, FoodItem{Position: position})
-			occupied[position] = true
-		}
-	}
-
-	return foodItems
-}
 
 func (s *ServerStateManager) Update(dt float64) {
 	updateGameState(s.state)
@@ -57,7 +33,7 @@ func (s *ServerStateManager) Get() GameState {
 	return s.state
 }
 
-func (s *ServerStateManager) ApplyInputToState(ci ClientInput) {
+func (s *ServerStateManager) ApplyInputToState(ci nw.ClientInput) {
 	snake, exists := s.state.Snakes[ci.ClientID]
 	if !exists {
 		return
@@ -77,8 +53,7 @@ func (s *ServerStateManager) ApplyInputToState(ci ClientInput) {
 }
 
 func (s *ServerStateManager) InitClientEntity(clientID string) {
-	s.clientInputQueues[clientID] = make([]ClientInput, 0)
-
+	s.clientInputQueues[clientID] = make([]nw.ClientInput, 0)
 	s.state.Snakes[clientID] = &Snake{
 		ID:        clientID,
 		Segments:  []Position{{X: 0, Y: 0}},
@@ -88,102 +63,4 @@ func (s *ServerStateManager) InitClientEntity(clientID string) {
 func (s *ServerStateManager) RemoveClientEntity(clientId string) {
 	delete(s.state.Snakes, clientId)
 	delete(s.clientInputQueues, clientId)
-}
-
-func updateGameState(gameState GameState) {
-	for _, snake := range gameState.Snakes {
-		moveSnake(snake, int(gameState.World.ToInt32().Width), int(gameState.World.ToInt32().Height), gameState.FoodItems, gameState.Snakes)
-	}
-}
-
-// move snake but respect world bounds
-// expand snake by adding a new tail if it eats food
-func moveSnake(snake *Snake, worldWidth, worldHeight int, foodItems []FoodItem, allSnakes map[string]*Snake) {
-	head := snake.Segments[0]
-	newHead := head
-
-	switch snake.Direction {
-	case "UP":
-		newHead.Y -= 1
-	case "DOWN":
-		newHead.Y += 1
-	case "LEFT":
-		newHead.X -= 1
-	case "RIGHT":
-		newHead.X += 1
-	}
-
-	if newHead.X < 0 {
-		newHead.X = worldWidth/10 - 1
-	} else if newHead.X >= worldWidth/10 {
-		newHead.X = 0
-	}
-
-	if newHead.Y < 0 {
-		newHead.Y = worldHeight/10 - 1
-	} else if newHead.Y >= worldHeight/10 {
-		newHead.Y = 0
-	}
-	// Check for self-collision
-	if snakeCollidesWithSelf(snake, newHead) {
-		respawnSnake(snake, worldWidth, worldHeight)
-		return
-	}
-
-	// Check for collision with other snakes
-	for _, otherSnake := range allSnakes {
-		if otherSnake.ID != snake.ID {
-			if snakeCollidesWithOther(newHead, otherSnake) {
-				if len(snake.Segments) > len(otherSnake.Segments) {
-					// Eat the smaller snake
-					snake.Segments = append(snake.Segments, otherSnake.Segments...)
-					respawnSnake(otherSnake, worldWidth, worldHeight)
-				} else {
-					// Die and respawn
-					respawnSnake(snake, worldWidth, worldHeight)
-					return
-				}
-			}
-		}
-	}
-
-	// check if snake eats food
-	for i, food := range foodItems {
-		if newHead == food.Position {
-			// add new tail
-			snake.Segments = append(snake.Segments, snake.Segments[len(snake.Segments)-1])
-			// remove food
-			foodItems = append(foodItems[:i], foodItems[i+1:]...)
-			break
-		}
-	}
-
-	snake.Segments = append([]Position{newHead}, snake.Segments...)
-	snake.Segments = snake.Segments[:len(snake.Segments)-1]
-}
-
-func snakeCollidesWithSelf(snake *Snake, newHead Position) bool {
-	for _, segment := range snake.Segments[1:] {
-		if newHead == segment {
-			return true
-		}
-	}
-	return false
-}
-
-func snakeCollidesWithOther(newHead Position, otherSnake *Snake) bool {
-	for _, segment := range otherSnake.Segments {
-		if newHead == segment {
-			return true
-		}
-	}
-	return false
-}
-
-func respawnSnake(snake *Snake, worldWidth, worldHeight int) {
-	snake.Segments = []Position{{
-		X: 1 + rand.Intn(worldWidth/10-2),
-		Y: 1 + rand.Intn(worldHeight/10-2),
-	}}
-	snake.Direction = "RIGHT"
 }

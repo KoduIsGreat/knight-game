@@ -3,7 +3,7 @@ package player
 import (
 	"fmt"
 
-	"github.com/KoduIsGreat/knight-game/controls"
+	// "github.com/KoduIsGreat/knight-game/controls"
 	rl "github.com/gen2brain/raylib-go/raylib"
 )
 
@@ -60,15 +60,15 @@ type Jumping struct {
 }
 
 // Physics implements state.State.
-func (j *Jumping) Physics(dt float64) {
-	if rl.IsKeyDown(controls.MOVE_RIGHT) {
-		j.p.body.Velocity.X = PlayerVelocity * .3
-	} else if rl.IsKeyDown(controls.MOVE_LEFT) {
-		j.p.body.Velocity.X = -PlayerVelocity * .3
-	}
-	j.p.body.Velocity.Y = -PlayerVelocity
-	j.p.body.Position.Y += j.p.body.Velocity.Y
-}
+// func (j *Jumping) Physics(dt float64) {
+// 	if rl.IsKeyDown(controls.MOVE_RIGHT) {
+// 		j.p.body.Velocity.X = PlayerVelocity * .3
+// 	} else if rl.IsKeyDown(controls.MOVE_LEFT) {
+// 		j.p.body.Velocity.X = -PlayerVelocity * .3
+// 	}
+// 	j.p.body.Velocity.Y = -PlayerVelocity
+// 	j.p.body.Position.Y += j.p.body.Velocity.Y
+// }
 
 // Update implements state.State.
 func (j *Jumping) Update(dt float64) {
@@ -96,5 +96,6 @@ type State interface {
 
 var _ State = &Idle{}
 var _ State = &Running{}
-var _ State = &Jumping{}
+
+// var _ State = &Jumping{}
 var _ State = &Falling{}

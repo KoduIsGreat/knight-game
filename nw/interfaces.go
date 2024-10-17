@@ -1,10 +1,8 @@
 package nw
 
-import "github.com/KoduIsGreat/knight-game/common"
-
 type StateManager[T any] interface {
 	Update(dt float64)
-	ApplyInputToState(ci common.ClientInput)
+	ApplyInputToState(ci ClientInput)
 	InitClientEntity(clientID string)
 	RemoveClientEntity(clientID string)
 	Get() T
@@ -12,7 +10,7 @@ type StateManager[T any] interface {
 
 type ClientStateManager[T any] interface {
 	Update(dt float64)
-	ReconcileState(msg common.ServerStateMessage)
+	ReconcileState(msg ServerStateMessage[T])
 	UpdateLocal(input string)
 	InputSeq() uint32
 	GetCurrent() T
@@ -25,6 +23,6 @@ type GameClient[T any] interface {
 	SendInputToServer(input string)
 	State() ClientStateManager[T]
 	ClientID() string
-	RecvFromServer() <-chan common.ServerStateMessage
+	RecvFromServer() <-chan ServerStateMessage[T]
 	QuitChan() <-chan struct{}
 }

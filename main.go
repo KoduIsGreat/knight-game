@@ -1,15 +1,12 @@
 package main
 
 import (
-	"context"
-	"crypto/tls"
 	embed "embed"
 	"fmt"
 	"os"
 	"strconv"
 	"strings"
 
-	"github.com/KoduIsGreat/knight-game/nw"
 	rl "github.com/gen2brain/raylib-go/raylib"
 )
 
@@ -50,7 +47,6 @@ var (
 	playerDir           playerDirection
 	music               rl.Music
 	musicPaused         bool = false
-	client              *nw.Client
 )
 
 type playerDirection int
@@ -236,16 +232,6 @@ func init() {
 }
 
 func main() {
-	tlsConfig := &tls.Config{
-		InsecureSkipVerify: true, // For testing only, disable in production
-		NextProtos:         []string{"snake-game"},
-	}
-	c, err := nw.Connect(context.Background(), tlsConfig, "localhost:4242")
-	if err != nil {
-		fmt.Println(err)
-		os.Exit(1)
-	}
-	client = c
 	for running {
 		update()
 		input()

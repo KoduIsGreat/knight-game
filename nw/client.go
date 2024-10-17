@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"log"
 
-	. "github.com/KoduIsGreat/knight-game/common"
 	quic "github.com/quic-go/quic-go"
 )
 
@@ -17,7 +16,7 @@ type Client[T any] struct {
 	// sendChan is used to send messages to the server
 	sendChan chan []byte
 	// recvChan is used to receive messages from the server
-	recvChan chan ServerStateMessage
+	recvChan chan ServerStateMessage[T]
 	// quitChan is used to signal the network handlers to stop
 	quitChan chan struct{}
 	// state is the client's state manager
@@ -27,15 +26,20 @@ type Client[T any] struct {
 	clientID string
 }
 
+type ClientOpts struct {
+	ServerAddress string
+	TLSConfig     *tls.Config
+}
+
 // NewClient creates a new client with the given state manager.
-func NewClient[T any](state ClientStateManager[T]) *Client[T] {
+func NewClient[T any](state ClientStateManager[T], co ClientOpts) *Client[T] {
 	c := &Client[T]{
 		sendChan: make(chan []byte),
-		recvChan: make(chan ServerStateMessage),
+		recvChan: make(chan ServerStateMessage[T]),
 		quitChan: make(chan struct{}),
 		state:    state,
 	}
-	c.connectToServer()
+	c.connectToServer(co)
 	c.waitUntilConnected()
 	c.startNetworkHandlers()
 	return c
@@ -60,7 +64,7 @@ func (c *Client[T]) SendInputToServer(input string) {
 	c.sendChan <- append(data, '\n')
 }
 
-func (c *Client[T]) RecvFromServer() <-chan ServerStateMessage {
+func (c *Client[T]) RecvFromServer() <-chan ServerStateMessage[T] {
 	return c.recvChan
 }
 
@@ -73,13 +77,17 @@ func (c *Client[T]) ClientID() string {
 }
 
 // connectToServer establishes a QUIC connection to the server.
-func (c *Client[T]) connectToServer() {
-	tlsConfig := &tls.Config{
-		InsecureSkipVerify: true,
-		NextProtos:         []string{"snake-game"},
+func (c *Client[T]) connectToServer(co ClientOpts) {
+	if co.ServerAddress == "" {
+		co.ServerAddress = "localhost:4242"
 	}
-
-	session, err := quic.DialAddr(context.Background(), address, tlsConfig, nil)
+	if co.TLSConfig == nil {
+		co.TLSConfig = &tls.Config{
+			InsecureSkipVerify: true,
+			NextProtos:         []string{"default-game"},
+		}
+	}
+	session, err := quic.DialAddr(context.Background(), co.ServerAddress, co.TLSConfig, nil)
 	if err != nil {
 		log.Fatal("Failed to connect to server:", err)
 	}
@@ -118,7 +126,7 @@ func (c *Client[T]) reader() {
 			return
 		}
 
-		var serverMessage ServerStateMessage
+		var serverMessage ServerStateMessage[T]
 		err = json.Unmarshal([]byte(message), &serverMessage)
 		if err != nil {
 			log.Println("Error parsing game state:", err)

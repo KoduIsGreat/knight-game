@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"time"
 
-	. "github.com/KoduIsGreat/knight-game/common"
 	"github.com/KoduIsGreat/knight-game/nw"
 	rl "github.com/gen2brain/raylib-go/raylib"
 )
@@ -40,8 +39,6 @@ func NewClientStateManger[T GameState]() *ClientStateManager {
 	}
 }
 
-var _ nw.ClientStateManager[GameState] = &ClientStateManager{}
-
 func (s *ClientStateManager) GetCurrent() GameState {
 	return s.currentState
 }
@@ -62,7 +59,7 @@ func (s *ClientStateManager) InputSeq() uint32 {
 
 // ReconcileGameState reconciles the client's game state with the server's game state.
 // It is called when the client receives a new server state message at the beginning of the frame
-func (s *ClientStateManager) ReconcileState(serverMessage ServerStateMessage) {
+func (s *ClientStateManager) ReconcileState(serverMessage nw.ServerStateMessage[GameState]) {
 	serverGameState := serverMessage.GameState
 	acknowledgedSeq := serverMessage.AcknowledgedSeq[s.clientID]
 	// Remove acknowledged inputs and states
