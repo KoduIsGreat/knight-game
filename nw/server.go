@@ -19,24 +19,19 @@ type Server[T any] struct {
 	tlsConfig  *tls.Config
 	quicConfig *quic.Config
 
-	lobbies map[string]*Lobby
+	lobbies map[string]*GameServer[T]
 	state   StateManager[T]
 	// defines the Tick of the server
 	tickRate time.Duration
 	log      *log.Logger
 	// map of <remote_address:quic.StreamID> to Client
 	clients map[string]*client
+
 	// channel for new clients joining the server
 	newClients        chan *client
 	removeClients     chan *client
 	clientInputs      chan ClientInput
 	clientInputQueues map[string][]ClientInput
-}
-
-type Lobby struct {
-	ID      string
-	clients map[string]*client
-	started bool
 }
 
 type ClientInput struct {
@@ -53,6 +48,7 @@ type ServerStateMessage[T any] struct {
 // represents a client connected to the server
 type client struct {
 	ID           string
+	nick         string
 	conn         quic.Connection
 	stream       quic.Stream
 	sendChan     chan Message
@@ -77,39 +73,19 @@ func (c *client) writer() {
 	}
 }
 
-func (c *client) reader(removedClients chan *client, clientInputs chan ClientInput) {
+func (c *client) reader(removedClients chan *client, mh MessageHandler) {
 	defer func() {
 		c.quitChan <- struct{}{}
 		removedClients <- c
 	}()
 
-	buf := make([]byte, 1024)
 	for {
-		n, err := c.stream.Read(buf)
-		if err != nil {
-			log.Println("Client disconnected:", err)
+		var message Message
+		if err := message.DecodeFrom(c.stream); err != nil {
+			log.Println("error decoding message:", err)
 			return
 		}
-		if buf[0] == 'j' {
-			continue
-		}
-
-		var inputMsg struct {
-			Sequence uint32 `json:"sequence"`
-			Input    string `json:"input"`
-		}
-
-		err = json.Unmarshal(buf[:n], &inputMsg)
-		if err != nil {
-			log.Println("Error parsing client input:", err)
-			continue
-		}
-
-		clientInputs <- ClientInput{
-			ClientID: c.ID,
-			Input:    inputMsg.Input,
-			Sequence: inputMsg.Sequence,
-		}
+		mh.Handle(message)
 	}
 }
 
@@ -127,6 +103,7 @@ func NewServer[T any](sm StateManager[T], opts ...ServerOption[T]) *Server[T] {
 		state:             sm,
 		tickRate:          gameInterval,
 		log:               log,
+		lobbies:           make(map[string]*GameServer[T]),
 		clients:           make(map[string]*client),
 		newClients:        make(chan *client),
 		removeClients:     make(chan *client),
@@ -185,7 +162,8 @@ func (s *Server[T]) handleClient(conn quic.Connection) {
 
 	// Add the client to the server
 	go client.writer()
-	go client.reader(s.removeClients, s.clientInputs)
+	//TODO fix this
+	go client.reader(s.removeClients, nil)
 	s.newClients <- client
 }
 

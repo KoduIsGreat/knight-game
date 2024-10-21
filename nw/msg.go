@@ -1,24 +1,14 @@
 package nw
 
 import (
+	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"io"
 )
 
-type MessageHeader uint8
-
 const (
-	MsgAuth MessageHeader = iota
-	MsgAuthAck
-	MsgConnect
-	MsgDisconnect
-	MsgLobbyCreate
-	MsgLobbyCreated
-	MsgLobbyClientReady
-	MsgLobbyClientJoin
-	MsgLobbyClientLeave
-	MsgClientInput
-	MsgServerState
+	MaxMessageSize = 1024
 )
 
 const (
@@ -26,23 +16,23 @@ const (
 	MsgSept uint8 = '|'
 )
 
-type MessageFmt uint8
-
-const (
-	FmtText MessageFmt = iota
-	FmtBinary
-	FmtJSON
-)
-
 type messageData struct {
 	Size uint16
-	Fmt  uint8
+	Fmt  MessageFmt
 	Data []byte
 }
 
 type Message struct {
 	header MessageHeader
 	data   messageData
+}
+
+func (m Message) String() string {
+	return fmt.Sprintf("Message{header: %s, fmt: %s, size: %d, data: %s}", m.header.String(), m.data.Fmt.String(), m.data.Size, m.data.Data)
+}
+
+func (m Message) HexString() string {
+	return hex.EncodeToString(m.Pack())
 }
 
 func (m *Message) Pack() []byte {
@@ -60,21 +50,34 @@ func (m *Message) Unpack(buf []byte) error {
 		return fmt.Errorf("invalid message buffer")
 	}
 	m.header = MessageHeader(buf[0])
-	m.data.Fmt = buf[1]
+	m.data.Fmt = MessageFmt(buf[1])
 	m.data.Size = uint16(buf[2])<<8 | uint16(buf[3])
 	m.data.Data = make([]byte, m.data.Size)
+	fmt.Println("Unpack data", m.data.Size, m.data.Fmt, m.data.Data, buf[4:])
 	copy(m.data.Data, buf[4:])
+
+	fmt.Println("Unpack data", m.data.Size, m.data.Fmt, m.data.Data, buf[4:])
 	return nil
 }
 
-func (m *Message) EncodeTo(w io.Writer) error {
+type MessageHandler interface {
+	Handle(Message) error
+}
+
+type MessageHandlerFunc func(Message) error
+
+func (f MessageHandlerFunc) Handle(m Message) error {
+	return f(m)
+}
+
+func (m Message) EncodeTo(w io.Writer) error {
 	if _, err := w.Write(m.Pack()); err != nil {
 		return err
 	}
 	return nil
 }
 func (m *Message) DecodeFrom(r io.Reader) error {
-	buf := make([]byte, 1024)
+	buf := make([]byte, MaxMessageSize)
 	n, err := r.Read(buf)
 	if err != nil {
 		return err
@@ -88,7 +91,7 @@ func NewMessage(header MessageHeader, fmt MessageFmt, data []byte) Message {
 		header: header,
 		data: messageData{
 			Size: uint16(len(data)),
-			Fmt:  uint8(fmt),
+			Fmt:  fmt,
 			Data: data,
 		},
 	}
@@ -127,10 +130,68 @@ func NewLobbyCreatedMessage(fmt MessageFmt, lobbyID string) Message {
 	return NewMessage(MsgLobbyCreated, fmt, []byte(lobbyID))
 }
 
-func NewLobbyJoinMessage(fmt MessageFmt, lobbyID, clientId string) Message {
-	return NewMessage(MsgLobbyClientJoin, fmt, []byte(lobbyID+clientId))
+func NewLobbyJoinMessage(f MessageFmt, lobbyID, clientId string) Message {
+	msg := fmt.Sprintf("%s|%s", lobbyID, clientId)
+	switch f {
+	case FmtJSON:
+		data, _ := json.Marshal(lobbyMsg{LobbyID: lobbyID, ClientID: clientId})
+		return NewMessage(MsgLobbyClientJoin, f, data)
+	case FmtText:
+		return NewMessage(MsgLobbyClientJoin, f, []byte(msg))
+	case FmtBinary:
+		return NewMessage(MsgLobbyClientJoin, f, []byte(msg))
+	}
+	return NewMessage(MsgLobbyClientJoin, f, []byte(msg))
 }
 
-func NewLobbyLeaveMessage(fmt MessageFmt, lobbyID, clientId string) Message {
-	return NewMessage(MsgLobbyClientLeave, fmt, []byte(lobbyID+clientId))
+type lobbyMsg struct {
+	LobbyID  string `json:"lobbyId"`
+	ClientID string `json:"clientId"`
+}
+
+func NewLobbyLeaveMessage(f MessageFmt, lobbyID, clientId string) Message {
+	msg := fmt.Sprintf("%s|%s", lobbyID, clientId)
+	switch f {
+	case FmtJSON:
+		data, _ := json.Marshal(lobbyMsg{LobbyID: lobbyID, ClientID: clientId})
+		return NewMessage(MsgLobbyClientLeave, f, data)
+	case FmtText:
+		return NewMessage(MsgLobbyClientLeave, f, []byte(msg))
+	case FmtBinary:
+		return NewMessage(MsgLobbyClientLeave, f, []byte(msg))
+	}
+	return NewMessage(MsgLobbyClientLeave, f, []byte(msg))
+}
+
+func NewGameStateMessage(f MessageFmt, state any) (Message, error) {
+	var data []byte
+	switch f {
+	case FmtJSON:
+		var err error
+		data, err = json.Marshal(state)
+		if err != nil {
+			return Message{}, err
+		}
+	default:
+		return Message{}, fmt.Errorf("unsupported message format")
+	}
+
+	return NewMessage(MsgServerState, f, data), nil
+}
+
+func NewClientInputMessage(f MessageFmt, ci ClientInput) (Message, error) {
+	var data []byte
+	switch f {
+	case FmtJSON:
+		var err error
+		data, err = json.Marshal(ci)
+		if err != nil {
+			return Message{}, err
+		}
+	default:
+		return Message{}, fmt.Errorf("unsupported message format")
+	}
+
+	return NewMessage(MsgClientInput, f, data), nil
+
 }

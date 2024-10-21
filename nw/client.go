@@ -14,7 +14,7 @@ import (
 type Client[T any] struct {
 	stream quic.Stream
 	// sendChan is used to send messages to the server
-	sendChan chan []byte
+	sendChan chan Message
 	// recvChan is used to receive messages from the server
 	recvChan chan ServerStateMessage[T]
 	// quitChan is used to signal the network handlers to stop
@@ -22,6 +22,7 @@ type Client[T any] struct {
 	// state is the client's state manager
 	state ClientStateManager[T]
 
+	mh MessageHandler
 	// clientID is the client's ID determined by the server
 	clientID string
 }
@@ -34,7 +35,7 @@ type ClientOpts struct {
 // NewClient creates a new client with the given state manager.
 func NewClient[T any](state ClientStateManager[T], co ClientOpts) *Client[T] {
 	c := &Client[T]{
-		sendChan: make(chan []byte),
+		sendChan: make(chan Message),
 		recvChan: make(chan ServerStateMessage[T]),
 		quitChan: make(chan struct{}),
 		state:    state,
@@ -49,19 +50,22 @@ func (c *Client[T]) State() ClientStateManager[T] {
 	return c.state
 }
 
-func (c *Client[T]) SendInputToServer(input string) {
-	fmt.Println("Sending input:", input)
-	msg := ClientInput{
+func (c *Client[T]) makeClientInputMessage(input string) (Message, error) {
+	ci := ClientInput{
 		ClientID: c.clientID,
 		Sequence: c.state.InputSeq(),
 		Input:    input,
 	}
-	data, err := json.Marshal(msg)
+	return NewClientInputMessage(FmtJSON, ci)
+}
+
+func (c *Client[T]) SendInputToServer(input string) {
+	fmt.Println("Sending input:", input)
+	msg, err := c.makeClientInputMessage(input)
 	if err != nil {
-		log.Println("Error marshaling input:", err)
-		return
+		log.Println("Error creating client input message:", err)
 	}
-	c.sendChan <- append(data, '\n')
+	c.sendChan <- msg
 }
 
 func (c *Client[T]) RecvFromServer() <-chan ServerStateMessage[T] {
@@ -103,7 +107,7 @@ func (c *Client[T]) writer() {
 	for {
 		select {
 		case msg := <-c.sendChan:
-			if _, err := c.stream.Write(msg); err != nil {
+			if err := msg.EncodeTo(c.stream); err != nil {
 				log.Println("Error sending message to server:", err)
 				return
 			}
@@ -113,26 +117,24 @@ func (c *Client[T]) writer() {
 	}
 }
 
-func (c *Client[T]) reader() {
+func (c *Client[T]) reader(mh MessageHandler) {
 	defer func() {
 		c.quitChan <- struct{}{}
 	}()
 
 	reader := bufio.NewReader(c.stream)
 	for {
-		message, err := reader.ReadString('\n')
+		message, err := reader.ReadString(MsgEnd)
 		if err != nil {
 			log.Println("Error receiving game state:", err)
 			return
 		}
-
-		var serverMessage ServerStateMessage[T]
-		err = json.Unmarshal([]byte(message), &serverMessage)
-		if err != nil {
-			log.Println("Error parsing game state:", err)
-			continue
+		var msg Message
+		if err := msg.Unpack([]byte(message)); err != nil {
+			log.Println("error decoding message:", err)
+			return
 		}
-		c.recvChan <- serverMessage
+		mh.Handle(msg)
 	}
 }
 
@@ -165,5 +167,5 @@ func (c *Client[T]) waitUntilConnected() {
 
 func (c *Client[T]) startNetworkHandlers() {
 	go c.writer()
-	go c.reader()
+	go c.reader(c.mh)
 }

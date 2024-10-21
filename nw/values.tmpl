@@ -1,0 +1,19 @@
+func {{.enum.Name}}Values() []{{.enum.Name}}{
+	values := make([]{{.enum.Name}}, 0, len(_{{.enum.Name}}Value))
+	for v := range _{{.enum.Name}}Map {
+		values = append(values, v)
+	}
+	return values
+}
+
+func (x *{{.enum.Name}}) UnmarshalJSON(data []byte) error {
+	return x.UnmarshalText(data)
+}
+
+func (x {{.enum.Name}}) MarshalJSON() ([]byte, error) {
+	s , err := x.MarshalText()
+	if err != nil {
+		return nil, err
+	}
+	return []byte(`"` + string(s) + `"`), nil
+}
