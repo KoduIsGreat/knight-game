@@ -19,7 +19,8 @@ type Server[T any] struct {
 	tlsConfig  *tls.Config
 	quicConfig *quic.Config
 
-	state StateManager[T]
+	lobbies map[string]*Lobby
+	state   StateManager[T]
 	// defines the Tick of the server
 	tickRate time.Duration
 	log      *log.Logger
@@ -30,6 +31,12 @@ type Server[T any] struct {
 	removeClients     chan *client
 	clientInputs      chan ClientInput
 	clientInputQueues map[string][]ClientInput
+}
+
+type Lobby struct {
+	ID      string
+	clients map[string]*client
+	started bool
 }
 
 type ClientInput struct {
@@ -48,7 +55,7 @@ type client struct {
 	ID           string
 	conn         quic.Connection
 	stream       quic.Stream
-	sendChan     chan string
+	sendChan     chan Message
 	quitChan     chan struct{}
 	lastSequence uint32
 }
@@ -60,7 +67,7 @@ func (c *client) writer() {
 			if !ok {
 				return
 			}
-			if _, err := c.stream.Write([]byte(msg)); err != nil {
+			if err := msg.EncodeTo(c.stream); err != nil {
 				log.Println("Error sending message to client:", err)
 				return
 			}
@@ -171,7 +178,7 @@ func (s *Server[T]) handleClient(conn quic.Connection) {
 		ID:           clientID,
 		conn:         conn,
 		stream:       stream,
-		sendChan:     make(chan string, 10),
+		sendChan:     make(chan Message, 10),
 		quitChan:     make(chan struct{}),
 		lastSequence: 0,
 	}
@@ -180,23 +187,6 @@ func (s *Server[T]) handleClient(conn quic.Connection) {
 	go client.writer()
 	go client.reader(s.removeClients, s.clientInputs)
 	s.newClients <- client
-}
-
-func (s *Server[T]) sendJoinMsg(client *client) {
-	joinMsg := struct {
-		ClientID string `json:"clientID"`
-	}{
-		ClientID: client.ID,
-	}
-	data, err := json.Marshal(joinMsg)
-	if err != nil {
-		log.Println("Error marshaling join message:", err)
-		return
-	}
-	message := string(data) + "\n"
-
-	fmt.Println("acking join message for client:", message)
-	client.sendChan <- message
 }
 
 func (s *Server[T]) gameLoop() {
@@ -208,7 +198,8 @@ func (s *Server[T]) gameLoop() {
 			fmt.Printf("Adding client %s to server\n", client.ID)
 			s.clients[client.ID] = client
 			s.state.InitClientEntity(client.ID)
-			s.sendJoinMsg(client)
+			message := NewMessage(MsgConnect, FmtText, []byte(client.ID))
+			client.sendChan <- message
 			s.clientInputQueues[client.ID] = []ClientInput{}
 			s.broadcastGameState(s.state.Get(), s.clients)
 		case client := <-s.removeClients:
@@ -266,8 +257,7 @@ func (s *Server[T]) broadcastGameState(gameState T, clients map[string]*client) 
 		log.Println("Error marshaling game state:", err)
 		return
 	}
-	message := string(data) + "\n"
-
+	message := NewMessage(MsgServerState, FmtJSON, data)
 	for _, client := range clients {
 		select {
 		case client.sendChan <- message:

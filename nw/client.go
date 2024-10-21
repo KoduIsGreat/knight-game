@@ -84,7 +84,7 @@ func (c *Client[T]) connectToServer(co ClientOpts) {
 	if co.TLSConfig == nil {
 		co.TLSConfig = &tls.Config{
 			InsecureSkipVerify: true,
-			NextProtos:         []string{"default-game"},
+			NextProtos:         []string{"snake-game"},
 		}
 	}
 	session, err := quic.DialAddr(context.Background(), co.ServerAddress, co.TLSConfig, nil)
