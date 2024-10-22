@@ -21,6 +21,7 @@ func main() {
 
 type Game struct {
 	client       *nw.Client[snake.GameState]
+	started      bool
 	renderEngine snake.RaylibRenderer
 }
 

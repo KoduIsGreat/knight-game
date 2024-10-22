@@ -17,17 +17,53 @@ type GameServer[T any] struct {
 	tickRate          time.Duration
 	newClients        chan *client
 	removeClients     chan *client
+	readyChan         chan *client
+	readyClients      map[string]bool
 	startChan         chan struct{}
+	stopChan          chan struct{}
 	started           bool
 }
 
-func (s *GameServer[T]) Broadcast(msg Message) {
+func NewGameServerID() string {
+	return fmt.Sprintf("game_%d", time.Now().Unix())
+}
+
+func NewGameServer[T any](id string, state StateManager[T], opts ...GameServerOption[T]) *GameServer[T] {
+	s := &GameServer[T]{
+		ID:                id,
+		clients:           make(map[string]*client),
+		state:             state,
+		clientInputs:      make(chan ClientInput),
+		log:               log.Default(),
+		clientInputQueues: make(map[string][]ClientInput),
+		tickRate:          time.Second / 30,
+		newClients:        make(chan *client),
+		removeClients:     make(chan *client),
+		startChan:         make(chan struct{}),
+		stopChan:          make(chan struct{}),
+	}
+	for _, opt := range opts {
+		opt(s)
+	}
+	go s.handleLobbyActions()
+	return s
+}
+
+func (s *GameServer[T]) broadcast(msg Message) {
 	for _, client := range s.clients {
 		client.sendChan <- msg
 	}
 }
 
-func (s *GameServer[T]) MakeServerStateMessage(gameState T) (Message, error) {
+func (s *GameServer[T]) addClient(client *client) {
+	s.newClients <- client
+}
+
+func (s *GameServer[T]) removeClient(client *client) {
+	s.removeClients <- client
+}
+
+func (s *GameServer[T]) makeServerStateMessage(gameState T) (Message, error) {
 	ackSeq := make(map[string]uint32)
 	for clientID, client := range s.clients {
 		ackSeq[clientID] = client.lastSequence
@@ -39,7 +75,7 @@ func (s *GameServer[T]) MakeServerStateMessage(gameState T) (Message, error) {
 	return NewGameStateMessage(FmtJSON, serverMessage)
 }
 
-func (s *GameServer[T]) Start() {
+func (s *GameServer[T]) start() {
 	countDownTicker := time.NewTicker(time.Second)
 	countDown := 10
 	for {
@@ -49,7 +85,7 @@ func (s *GameServer[T]) Start() {
 			s.log.Println("Starting in", countDown)
 			countDownMsg := fmt.Sprintf("Game Starting in %d", countDown)
 			msg := NewMessage(MsgLobbyGameStart, FmtText, []byte(countDownMsg))
-			s.Broadcast(msg)
+			s.broadcast(msg)
 			if countDown == 0 {
 				s.startChan <- struct{}{}
 				break
@@ -64,8 +100,15 @@ func (s *GameServer[T]) Start() {
 	}
 	go s.gameLoop()
 }
+func (s *GameServer[T]) stop() {
+	s.log.Println("Stopping server")
+	s.stopChan <- struct{}{}
+	for _, client := range s.clients {
+		s.removeClients <- client
+	}
+}
 
-func (s *GameServer[T]) ProcessInputs() {
+func (s *GameServer[T]) processInputs() {
 	for clientID, queue := range s.clientInputQueues {
 		client := s.clients[clientID]
 		sort.Slice(queue, func(i, j int) bool {
@@ -86,38 +129,66 @@ func (s *GameServer[T]) ProcessInputs() {
 	}
 }
 
+func (s *GameServer[T]) handleLobbyActions() {
+	for {
+		select {
+		case readyClient := <-s.readyChan:
+			s.log.Println("Client ready msg:", readyClient.ID)
+			s.readyClients[readyClient.ID] = !s.readyClients[readyClient.ID]
+			s.broadcast(NewMessage(MsgLobbyClientReady, FmtText, []byte(readyClient.ID)))
+		case client := <-s.newClients:
+			fmt.Printf("Adding client %s to lobby %s\n", client.ID, s.ID)
+			s.clients[client.ID] = client
+			s.state.InitClientEntity(client.ID)
+			message := NewMessage(MsgLobbyClientJoin, FmtText, []byte(client.ID))
+			client.sendChan <- message
+			s.clientInputQueues[client.ID] = []ClientInput{}
+			s.broadcast(message)
+		case client := <-s.removeClients:
+			s.state.RemoveClientEntity(client.ID)
+			message := NewMessage(MsgLobbyClientLeave, FmtText, []byte(client.ID))
+			delete(s.clientInputQueues, client.ID)
+			close(client.sendChan)
+			s.broadcast(message)
+			s.log.Println("Client removed, clients count:", len(s.clients))
+		case <-s.startChan:
+			s.log.Println("attempting to start game")
+			var allReady bool = true
+			for _, client := range s.clients {
+				allReady = s.readyClients[client.ID] && allReady
+			}
+			if !allReady {
+				s.log.Println("Not all clients are ready")
+				s.broadcast(NewMessage(MsgLobbyClientsNotReady, FmtText, []byte("Not all clients are ready")))
+				continue
+			}
+			s.log.Println("Starting game")
+			s.broadcast(NewMessage(MsgLobbyGameStart, FmtText, []byte("Game Starting")))
+			s.start()
+
+		}
+	}
+}
+
 func (s *GameServer[T]) gameLoop() {
 	ticker := time.NewTicker(s.tickRate)
 	defer ticker.Stop()
 	for {
 		select {
-		case client := <-s.newClients:
-			fmt.Printf("Adding client %s to server\n", client.ID)
-			s.clients[client.ID] = client
-			s.state.InitClientEntity(client.ID)
-			message := NewMessage(MsgConnect, FmtText, []byte(client.ID))
-			client.sendChan <- message
-			s.clientInputQueues[client.ID] = []ClientInput{}
-			s.Broadcast(message)
-		case client := <-s.removeClients:
-			s.state.RemoveClientEntity(client.ID)
-			delete(s.clientInputQueues, client.ID)
-			close(client.sendChan)
-			s.log.Println("Client removed, clients count:", len(s.clients))
 		case input := <-s.clientInputs:
 			s.log.Println("Client input received:", input)
 			queue := s.clientInputQueues[input.ClientID]
 			queue = append(queue, input)
 			s.clientInputQueues[input.ClientID] = queue
 		case <-ticker.C:
-			s.ProcessInputs()
+			s.processInputs()
 			s.state.Update(s.tickRate.Seconds())
-			msg, err := s.MakeServerStateMessage(s.state.Get())
+			msg, err := s.makeServerStateMessage(s.state.Get())
 			if err != nil {
 				s.log.Println("Error making server state message:", err)
 				continue
 			}
-			s.Broadcast(msg)
+			s.broadcast(msg)
 		}
 	}
 }

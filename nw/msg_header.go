@@ -11,6 +11,7 @@ MsgLobbyCreate
 MsgLobbyCreated
 MsgLobbyDeleted
 MsgLobbyGameStart
+MsgLobbyClientsNotReady
 MsgLobbyClientReady
 MsgLobbyClientJoin
 MsgLobbyClientLeave

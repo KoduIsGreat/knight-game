@@ -36,7 +36,7 @@ func (m Message) HexString() string {
 }
 
 func (m *Message) Pack() []byte {
-	buf := make([]byte, 3+len(m.data.Data))
+	buf := make([]byte, 5+len(m.data.Data))
 	buf[0] = byte(m.header)
 	buf[1] = byte(m.data.Fmt)
 	buf[2] = byte(m.data.Size >> 8)
@@ -49,14 +49,13 @@ func (m *Message) Unpack(buf []byte) error {
 	if len(buf) < 4 {
 		return fmt.Errorf("invalid message buffer")
 	}
+
 	m.header = MessageHeader(buf[0])
 	m.data.Fmt = MessageFmt(buf[1])
 	m.data.Size = uint16(buf[2])<<8 | uint16(buf[3])
 	m.data.Data = make([]byte, m.data.Size)
-	fmt.Println("Unpack data", m.data.Size, m.data.Fmt, m.data.Data, buf[4:])
 	copy(m.data.Data, buf[4:])
 
-	fmt.Println("Unpack data", m.data.Size, m.data.Fmt, m.data.Data, buf[4:])
 	return nil
 }
 
@@ -130,6 +129,10 @@ func NewLobbyCreatedMessage(fmt MessageFmt, lobbyID string) Message {
 	return NewMessage(MsgLobbyCreated, fmt, []byte(lobbyID))
 }
 
+func NewClientReadyMessage(fmt MessageFmt, clientId string) Message {
+	return NewMessage(MsgLobbyClientReady, fmt, []byte(clientId))
+}
+
 func NewLobbyJoinMessage(f MessageFmt, lobbyID, clientId string) Message {
 	msg := fmt.Sprintf("%s|%s", lobbyID, clientId)
 	switch f {
@@ -177,6 +180,23 @@ func NewGameStateMessage(f MessageFmt, state any) (Message, error) {
 	}
 
 	return NewMessage(MsgServerState, f, data), nil
+}
+
+func ServerStateMessageFromMessage[T any](m Message) (ServerStateMessage[T], error) {
+	var ssm ServerStateMessage[T]
+	if m.header != MsgServerState {
+		return ServerStateMessage[T]{}, fmt.Errorf("invalid message header")
+	}
+	switch m.data.Fmt {
+	case FmtJSON:
+		err := json.Unmarshal(m.data.Data, &ssm)
+		if err != nil {
+			return ServerStateMessage[T]{}, err
+		}
+	default:
+		return ServerStateMessage[T]{}, fmt.Errorf("unsupported message format")
+	}
+	return ssm, nil
 }
 
 func NewClientInputMessage(f MessageFmt, ci ClientInput) (Message, error) {

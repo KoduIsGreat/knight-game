@@ -1,7 +1,6 @@
 package nw
 
 import (
-	"fmt"
 	"testing"
 )
 
@@ -78,12 +77,11 @@ func TestMsgPack(t *testing.T) {
 }
 
 func TestMsgPackUnpack(t *testing.T) {
-	msg := NewAuthAckMessage(FmtText, "client1")
+	msg := NewAuthAckMessage(FmtText, "client12asdf")
 	bytes := msg.Pack()
 	var unpacked Message
 	unpacked.Unpack(bytes)
 
-	fmt.Println("Unpack data", unpacked.data.Size, unpacked.data.Fmt, unpacked.data.Data, msg.data.Data)
 	if unpacked.header != msg.header {
 		t.Errorf("\ngot %d\nwant %d", unpacked.header, msg.header)
 	}
@@ -101,12 +99,12 @@ func TestMsgPackUnpack(t *testing.T) {
 func TestMsgUnpack(t *testing.T) {
 	tests := []struct {
 		name string
-		msg  string
+		msg  []byte
 		want Message
 	}{
 		{
 			name: "empty message",
-			msg:  ``,
+			msg:  []byte{},
 			want: Message{
 				header: MsgAuth,
 				data: messageData{
@@ -118,7 +116,7 @@ func TestMsgUnpack(t *testing.T) {
 		},
 		{
 			name: "simple message",
-			msg:  `01000007636c69656e740a`,
+			msg:  []byte{byte(MsgAuthAck), byte(FmtText), 0, 7, 'c', 'l', 'i', 'e', 'n', 't', '1'},
 			want: Message{
 				header: MsgAuthAck,
 				data: messageData{

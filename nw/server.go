@@ -3,14 +3,14 @@ package nw
 import (
 	"context"
 	"crypto/tls"
-	"encoding/json"
 	"fmt"
 	"log"
 	"os"
-	"sort"
+	"strings"
 	"time"
 
 	quic "github.com/quic-go/quic-go"
+	"golang.org/x/exp/rand"
 )
 
 type Server[T any] struct {
@@ -27,11 +27,14 @@ type Server[T any] struct {
 	// map of <remote_address:quic.StreamID> to Client
 	clients map[string]*client
 
-	// channel for new clients joining the server
-	newClients        chan *client
-	removeClients     chan *client
-	clientInputs      chan ClientInput
-	clientInputQueues map[string][]ClientInput
+	// channel for handling joining clients
+	newClients chan *client
+	// channel for handling removing clients
+	removeClients chan *client
+	// channel for new lobbies being created on the server
+	newLobbies chan string
+	// channel for removing empty lobbies
+	closeLobbies chan string
 }
 
 type ClientInput struct {
@@ -97,18 +100,16 @@ func NewServer[T any](sm StateManager[T], opts ...ServerOption[T]) *Server[T] {
 		NextProtos:   []string{"snake-game"},
 	}
 	s := &Server[T]{
-		address:           address,
-		tlsConfig:         tlsConfig,
-		quicConfig:        &quic.Config{},
-		state:             sm,
-		tickRate:          gameInterval,
-		log:               log,
-		lobbies:           make(map[string]*GameServer[T]),
-		clients:           make(map[string]*client),
-		newClients:        make(chan *client),
-		removeClients:     make(chan *client),
-		clientInputs:      make(chan ClientInput),
-		clientInputQueues: map[string][]ClientInput{},
+		address:       address,
+		tlsConfig:     tlsConfig,
+		quicConfig:    &quic.Config{},
+		state:         sm,
+		tickRate:      gameInterval,
+		log:           log,
+		lobbies:       make(map[string]*GameServer[T]),
+		newClients:    make(chan *client),
+		removeClients: make(chan *client),
+		newLobbies:    make(chan string),
 	}
 
 	for _, opt := range opts {
@@ -129,7 +130,7 @@ func (s *Server[T]) Listen() error {
 
 	s.log.Println("Server is listening on", address)
 	// Start the broadcaster goroutine
-	go s.gameLoop()
+	go s.loop()
 	// Accept client connections
 	for {
 		conn, err := listener.Accept(context.Background())
@@ -138,6 +139,15 @@ func (s *Server[T]) Listen() error {
 		}
 		go s.handleClient(conn)
 	}
+}
+
+func randomString(length int) string {
+	const charset = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+	b := make([]byte, length)
+	for i := range b {
+		b[i] = charset[rand.Intn(len(charset))]
+	}
+	return string(b)
 }
 
 // handleClient handles individual client connections
@@ -162,83 +172,104 @@ func (s *Server[T]) handleClient(conn quic.Connection) {
 
 	// Add the client to the server
 	go client.writer()
-	//TODO fix this
-	go client.reader(s.removeClients, nil)
+	mh := MessageHandlerFunc(func(msg Message) error {
+		switch msg.header {
+		case MsgAuth:
+			// TODO handle auth message
+			client.sendChan <- NewMessage(MsgAuthAck, FmtText, []byte(client.ID))
+		case MsgConnect:
+			s.log.Println("Client connected:", client.ID)
+			s.newClients <- client
+			client.sendChan <- NewMessage(MsgConnect, FmtText, []byte(client.ID))
+		case MsgDisconnect:
+			s.log.Fatal("Client disconnected:", client.ID)
+			s.removeClients <- client
+			// TODO handle disconnect message
+		case MsgLobbyClientReady:
+			parts := strings.Split(string(msg.data.Data), "|")
+			if len(parts) != 2 {
+				return fmt.Errorf("invalid lobby join message")
+			}
+			lobbyID := parts[0]
+			lobby, ok := s.lobbies[lobbyID]
+			if !ok {
+				return fmt.Errorf("lobby not found")
+			}
+			lobby.readyChan <- client
+		case MsgLobbyCreate:
+			s.newLobbies <- fmt.Sprintf("%s:%s", randomString(6), string(msg.data.Data))
+		case MsgLobbyClientJoin:
+			parts := strings.Split(string(msg.data.Data), "|")
+			if len(parts) != 2 {
+				return fmt.Errorf("invalid lobby join message")
+			}
+			lobbyID := parts[0]
+			lobby := s.lobbies[lobbyID]
+			if lobby == nil {
+				return fmt.Errorf("lobby not found")
+			}
+			lobby.addClient(client)
+		case MsgLobbyClientLeave:
+			parts := strings.Split(string(msg.data.Data), "|")
+			if len(parts) != 2 {
+				return fmt.Errorf("invalid lobby leave message")
+			}
+			lobbyID := parts[0]
+			lobby := s.lobbies[lobbyID]
+			if lobby == nil {
+				return fmt.Errorf("lobby not found")
+			}
+			lobby.removeClient(client)
+			if len(lobby.clients) == 0 {
+				s.closeLobbies <- lobbyID
+			}
+		}
+
+		return nil
+	})
+
+	go client.reader(s.removeClients, mh)
 	s.newClients <- client
 }
 
-func (s *Server[T]) gameLoop() {
-	ticker := time.NewTicker(s.tickRate)
-	defer ticker.Stop()
+func (s *Server[T]) loop() {
 	for {
 		select {
+		case msg := <-s.newLobbies:
+			parts := strings.Split(msg, ":")
+			if len(parts) != 2 {
+				s.log.Println("Invalid lobby create message")
+				continue
+			}
+			newLobbyCode := parts[0]
+			clientID := parts[1]
+
+			for _, ok := s.lobbies[newLobbyCode]; ok == true; {
+				newLobbyCode = randomString(6)
+			}
+			newLobby := NewGameServer(newLobbyCode, s.state)
+			client, ok := s.clients[clientID]
+			if !ok {
+				s.log.Println("Client not found:", clientID)
+				continue
+			}
+			newLobby.addClient(client)
+			s.lobbies[newLobbyCode] = newLobby
+			s.log.Println("New lobby created:", newLobbyCode)
+			// Send the client the lobby code
+			message := NewMessage(MsgLobbyCreated, FmtText, []byte(newLobbyCode))
+			client.sendChan <- message
+
+		case lobbyCode := <-s.closeLobbies:
+			delete(s.lobbies, lobbyCode)
 		case client := <-s.newClients:
 			fmt.Printf("Adding client %s to server\n", client.ID)
 			s.clients[client.ID] = client
-			s.state.InitClientEntity(client.ID)
 			message := NewMessage(MsgConnect, FmtText, []byte(client.ID))
 			client.sendChan <- message
-			s.clientInputQueues[client.ID] = []ClientInput{}
-			s.broadcastGameState(s.state.Get(), s.clients)
 		case client := <-s.removeClients:
-			s.state.RemoveClientEntity(client.ID)
-			delete(s.clientInputQueues, client.ID)
 			close(client.sendChan)
 			s.log.Println("Client removed, clients count:", len(s.clients))
-		case input := <-s.clientInputs:
-			s.log.Println("Client input received:", input)
-			queue := s.clientInputQueues[input.ClientID]
-			queue = append(queue, input)
-			s.clientInputQueues[input.ClientID] = queue
-		case <-ticker.C:
-			s.processInputs()
-			s.state.Update(s.tickRate.Seconds())
-			s.broadcastGameState(s.state.Get(), s.clients)
-		}
-	}
-}
-
-func (s *Server[T]) processInputs() {
-	for clientID, queue := range s.clientInputQueues {
-		client := s.clients[clientID]
-		sort.Slice(queue, func(i, j int) bool {
-			return queue[i].Sequence < queue[j].Sequence
-		})
-
-		newQueue := make([]ClientInput, 0)
-		for _, input := range queue {
-			if input.Sequence > client.lastSequence {
-				s.state.ApplyInputToState(input)
-				client.lastSequence = input.Sequence
-			}
-			if input.Sequence > client.lastSequence {
-				newQueue = append(newQueue, input)
-			}
-		}
-		s.clientInputQueues[clientID] = newQueue
-	}
-}
-
-func (s *Server[T]) broadcastGameState(gameState T, clients map[string]*client) {
-	ackSeq := make(map[string]uint32)
-	for clientID, client := range clients {
-		ackSeq[clientID] = client.lastSequence
-	}
-
-	serverMessage := ServerStateMessage[T]{
-		GameState:       gameState,
-		AcknowledgedSeq: ackSeq,
-	}
-
-	data, err := json.Marshal(serverMessage)
-	if err != nil {
-		log.Println("Error marshaling game state:", err)
-		return
-	}
-	message := NewMessage(MsgServerState, FmtJSON, data)
-	for _, client := range clients {
-		select {
-		case client.sendChan <- message:
 		}
 	}
 }
