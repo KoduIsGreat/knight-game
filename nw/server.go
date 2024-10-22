@@ -3,9 +3,11 @@ package nw
 import (
 	"context"
 	"crypto/tls"
+	"encoding/json"
 	"fmt"
 	"log"
 	"os"
+	"sort"
 	"strings"
 	"time"
 
@@ -107,6 +109,7 @@ func NewServer[T any](sm StateManager[T], opts ...ServerOption[T]) *Server[T] {
 		tickRate:      gameInterval,
 		log:           log,
 		lobbies:       make(map[string]*GameServer[T]),
+		clients:       make(map[string]*client),
 		newClients:    make(chan *client),
 		removeClients: make(chan *client),
 		newLobbies:    make(chan string),
@@ -148,6 +151,35 @@ func randomString(length int) string {
 		b[i] = charset[rand.Intn(len(charset))]
 	}
 	return string(b)
+}
+
+type LobbyView struct {
+	Code       string `json:"code"`
+	OwnerID    string `json:"ownerID"`
+	MaxClients int    `json:"maxClients"`
+	NumClients int    `json:"numClients"`
+	Started    bool   `json:"started"`
+}
+
+type LobbiesSync struct {
+	Lobbies []LobbyView `json:"lobbies"`
+}
+
+func (s *Server[T]) makeLobbiesSync() LobbiesSync {
+	lobbies := make([]LobbyView, 0, len(s.lobbies))
+	for id, lobby := range s.lobbies {
+		lobbies = append(lobbies, LobbyView{
+			Code:       id,
+			OwnerID:    lobby.OwnerID,
+			MaxClients: lobby.maxClients,
+			NumClients: len(lobby.clients),
+			Started:    lobby.started,
+		})
+		sort.Slice(lobbies, func(i, j int) bool {
+			return lobbies[i].Code < lobbies[j].Code
+		})
+	}
+	return LobbiesSync{Lobbies: lobbies}
 }
 
 // handleClient handles individual client connections
@@ -196,8 +228,42 @@ func (s *Server[T]) handleClient(conn quic.Connection) {
 				return fmt.Errorf("lobby not found")
 			}
 			lobby.readyChan <- client
+		case MsgLobbyPromote: // Promote a client to host
+			parts := strings.Split(string(msg.data.Data), "|")
+			if len(parts) != 2 {
+				return fmt.Errorf("invalid lobby promote message")
+			}
+			lobbyID := parts[0]
+			lobby, ok := s.lobbies[lobbyID]
+			if !ok {
+				return fmt.Errorf("lobby not found")
+			}
+			lobby.promote(parts[1])
+		case MsgLobbyKick:
+			parts := strings.Split(string(msg.data.Data), "|")
+			if len(parts) != 2 {
+				return fmt.Errorf("invalid lobby promote message")
+			}
+			lobbyID := parts[0]
+			lobby, ok := s.lobbies[lobbyID]
+			if !ok {
+				return fmt.Errorf("lobby not found")
+			}
+			if client.ID != lobby.OwnerID {
+				return fmt.Errorf("only the lobby owner can kick clients")
+			}
+			lobby.kick(parts[1])
+		case MsgLobbiesSync:
+			lobbiesSync := s.makeLobbiesSync()
+			data, err := json.Marshal(lobbiesSync)
+			if err != nil {
+				return err
+			}
+			s.log.Printf("syncing lobbies for client %s\n", client.ID)
+			client.sendChan <- NewMessage(MsgLobbiesSynced, FmtJSON, data)
 		case MsgLobbyCreate:
-			s.newLobbies <- fmt.Sprintf("%s:%s", randomString(6), string(msg.data.Data))
+			nlobby := fmt.Sprintf("%s|%s", randomString(6), client.ID)
+			s.newLobbies <- nlobby
 		case MsgLobbyClientJoin:
 			parts := strings.Split(string(msg.data.Data), "|")
 			if len(parts) != 2 {
@@ -236,7 +302,8 @@ func (s *Server[T]) loop() {
 	for {
 		select {
 		case msg := <-s.newLobbies:
-			parts := strings.Split(msg, ":")
+			s.log.Printf("Creating new lobby: %s\n", msg)
+			parts := strings.Split(msg, "|")
 			if len(parts) != 2 {
 				s.log.Println("Invalid lobby create message")
 				continue
@@ -247,7 +314,7 @@ func (s *Server[T]) loop() {
 			for _, ok := s.lobbies[newLobbyCode]; ok == true; {
 				newLobbyCode = randomString(6)
 			}
-			newLobby := NewGameServer(newLobbyCode, s.state)
+			newLobby := NewGameServer(newLobbyCode, clientID, s.state)
 			client, ok := s.clients[clientID]
 			if !ok {
 				s.log.Println("Client not found:", clientID)

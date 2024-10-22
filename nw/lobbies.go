@@ -8,14 +8,19 @@ import (
 )
 
 type GameServer[T any] struct {
-	ID                string
+	ID         string
+	state      StateManager[T]
+	maxClients int
+	log        *log.Logger
+	countdown  int
+	tickRate   time.Duration
+
+	OwnerID           string
 	clients           map[string]*client
-	state             StateManager[T]
 	clientInputs      chan ClientInput
-	log               *log.Logger
 	clientInputQueues map[string][]ClientInput
-	tickRate          time.Duration
 	newClients        chan *client
+	promoteChan       chan string
 	removeClients     chan *client
 	readyChan         chan *client
 	readyClients      map[string]bool
@@ -28,9 +33,11 @@ func NewGameServerID() string {
 	return fmt.Sprintf("game_%d", time.Now().Unix())
 }
 
-func NewGameServer[T any](id string, state StateManager[T], opts ...GameServerOption[T]) *GameServer[T] {
+func NewGameServer[T any](id, ownerId string, state StateManager[T], opts ...GameServerOption[T]) *GameServer[T] {
 	s := &GameServer[T]{
-		ID:                id,
+		ID: id,
+
+		OwnerID:           ownerId,
 		clients:           make(map[string]*client),
 		state:             state,
 		clientInputs:      make(chan ClientInput),
@@ -40,13 +47,29 @@ func NewGameServer[T any](id string, state StateManager[T], opts ...GameServerOp
 		newClients:        make(chan *client),
 		removeClients:     make(chan *client),
 		startChan:         make(chan struct{}),
-		stopChan:          make(chan struct{}),
+		readyChan:         make(chan *client),
+		readyClients:      make(map[string]bool),
+		promoteChan:       make(chan string),
+
+		stopChan: make(chan struct{}),
 	}
 	for _, opt := range opts {
 		opt(s)
 	}
 	go s.handleLobbyActions()
 	return s
+}
+
+func (s *GameServer[T]) promote(clientId string) {
+	s.promoteChan <- clientId
+}
+func (s *GameServer[T]) kick(clientId string) {
+	client, ok := s.clients[clientId]
+	if !ok {
+		s.log.Println("Client not found to kick")
+		return
+	}
+	s.removeClients <- client
 }
 
 func (s *GameServer[T]) broadcast(msg Message) {
@@ -83,8 +106,8 @@ func (s *GameServer[T]) start() {
 		case <-countDownTicker.C:
 			countDown--
 			s.log.Println("Starting in", countDown)
-			countDownMsg := fmt.Sprintf("Game Starting in %d", countDown)
-			msg := NewMessage(MsgLobbyGameStart, FmtText, []byte(countDownMsg))
+			countDownMsg := fmt.Sprintf(`{"countdown": %d}`, countDown)
+			msg := NewMessage(MsgLobbyGameStarted, FmtJSON, []byte(countDownMsg))
 			s.broadcast(msg)
 			if countDown == 0 {
 				s.startChan <- struct{}{}
@@ -93,6 +116,8 @@ func (s *GameServer[T]) start() {
 		case <-s.startChan:
 			countDownTicker.Stop()
 			s.started = true
+			msg := NewMessage(MsgLobbyGameStarted, FmtText, []byte{})
+			s.broadcast(msg)
 			goto Started
 		}
 	Started:
@@ -139,11 +164,17 @@ func (s *GameServer[T]) handleLobbyActions() {
 		case client := <-s.newClients:
 			fmt.Printf("Adding client %s to lobby %s\n", client.ID, s.ID)
 			s.clients[client.ID] = client
-			s.state.InitClientEntity(client.ID)
 			message := NewMessage(MsgLobbyClientJoin, FmtText, []byte(client.ID))
 			client.sendChan <- message
 			s.clientInputQueues[client.ID] = []ClientInput{}
 			s.broadcast(message)
+		case toPromote := <-s.promoteChan:
+			_, ok := s.clients[toPromote]
+			if !ok {
+				s.log.Println("Client not found to promote")
+				continue
+			}
+			s.OwnerID = toPromote
 		case client := <-s.removeClients:
 			s.state.RemoveClientEntity(client.ID)
 			message := NewMessage(MsgLobbyClientLeave, FmtText, []byte(client.ID))
@@ -163,7 +194,6 @@ func (s *GameServer[T]) handleLobbyActions() {
 				continue
 			}
 			s.log.Println("Starting game")
-			s.broadcast(NewMessage(MsgLobbyGameStart, FmtText, []byte("Game Starting")))
 			s.start()
 
 		}
@@ -175,6 +205,8 @@ func (s *GameServer[T]) gameLoop() {
 	defer ticker.Stop()
 	for {
 		select {
+		case <-s.stopChan:
+			return
 		case input := <-s.clientInputs:
 			s.log.Println("Client input received:", input)
 			queue := s.clientInputQueues[input.ClientID]

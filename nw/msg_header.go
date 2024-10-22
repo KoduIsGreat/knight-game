@@ -11,10 +11,17 @@ MsgLobbyCreate
 MsgLobbyCreated
 MsgLobbyDeleted
 MsgLobbyGameStart
+MsgLobbyGameStarted
 MsgLobbyClientsNotReady
 MsgLobbyClientReady
 MsgLobbyClientJoin
 MsgLobbyClientLeave
+MsgLobbiesSync
+MsgLobbiesSynced
+MsgLobbyPromote
+MsgLobbyPromoted
+MsgLobbyKick
+MsgLobbyKicked
 MsgClientInput
 MsgServerState
 )

@@ -4,6 +4,8 @@ import (
 	"crypto/tls"
 	"log"
 	"time"
+
+	quic "github.com/quic-go/quic-go"
 )
 
 type ServerOption[T any] func(*Server[T])
@@ -26,5 +28,11 @@ func WithStateManager[T any](sm StateManager[T]) ServerOption[T] {
 func WithTLSConfig[T any](tlsConfig *tls.Config) ServerOption[T] {
 	return func(s *Server[T]) {
 		s.tlsConfig = tlsConfig
+	}
+}
+
+func WithQuicConfig[T any](quicConfig *quic.Config) ServerOption[T] {
+	return func(s *Server[T]) {
+		s.quicConfig = quicConfig
 	}
 }

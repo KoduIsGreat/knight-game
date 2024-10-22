@@ -182,6 +182,22 @@ func NewGameStateMessage(f MessageFmt, state any) (Message, error) {
 	return NewMessage(MsgServerState, f, data), nil
 }
 
+func NewLobbiesSyncMessage(f MessageFmt, lobbies []string) (Message, error) {
+	var data []byte
+	switch f {
+	case FmtJSON:
+		var err error
+		data, err = json.Marshal(lobbies)
+		if err != nil {
+			return Message{}, err
+		}
+	default:
+		return Message{}, fmt.Errorf("unsupported message format")
+	}
+
+	return NewMessage(MsgLobbiesSync, f, data), nil
+}
+
 func ServerStateMessageFromMessage[T any](m Message) (ServerStateMessage[T], error) {
 	var ssm ServerStateMessage[T]
 	if m.header != MsgServerState {

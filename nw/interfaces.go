@@ -25,4 +25,13 @@ type GameClient[T any] interface {
 	ClientID() string
 	RecvFromServer() <-chan ServerStateMessage[T]
 	QuitChan() <-chan struct{}
+	Start()
+	Promote(clientId string)
+	KickFromLobby(clientId string)
+	JoinLobby(lobbyId string)
+	SyncLobbies()
+	Lobby() *Lobby
+	Lobbies() LobbiesSync
+	IsStarted() bool
+	LeaveLobby()
 }

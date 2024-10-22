@@ -28,6 +28,8 @@ const (
 	MsgLobbyDeleted
 	// MsgLobbyGameStart is a MessageHeader of type MsgLobbyGameStart.
 	MsgLobbyGameStart
+	// MsgLobbyGameStarted is a MessageHeader of type MsgLobbyGameStarted.
+	MsgLobbyGameStarted
 	// MsgLobbyClientsNotReady is a MessageHeader of type MsgLobbyClientsNotReady.
 	MsgLobbyClientsNotReady
 	// MsgLobbyClientReady is a MessageHeader of type MsgLobbyClientReady.
@@ -36,13 +38,25 @@ const (
 	MsgLobbyClientJoin
 	// MsgLobbyClientLeave is a MessageHeader of type MsgLobbyClientLeave.
 	MsgLobbyClientLeave
+	// MsgLobbiesSync is a MessageHeader of type MsgLobbiesSync.
+	MsgLobbiesSync
+	// MsgLobbiesSynced is a MessageHeader of type MsgLobbiesSynced.
+	MsgLobbiesSynced
+	// MsgLobbyPromote is a MessageHeader of type MsgLobbyPromote.
+	MsgLobbyPromote
+	// MsgLobbyPromoted is a MessageHeader of type MsgLobbyPromoted.
+	MsgLobbyPromoted
+	// MsgLobbyKick is a MessageHeader of type MsgLobbyKick.
+	MsgLobbyKick
+	// MsgLobbyKicked is a MessageHeader of type MsgLobbyKicked.
+	MsgLobbyKicked
 	// MsgClientInput is a MessageHeader of type MsgClientInput.
 	MsgClientInput
 	// MsgServerState is a MessageHeader of type MsgServerState.
 	MsgServerState
 )
 
-const _MessageHeaderName = "MsgAuthMsgAuthAckMsgConnectMsgDisconnectMsgLobbyCreateMsgLobbyCreatedMsgLobbyDeletedMsgLobbyGameStartMsgLobbyClientsNotReadyMsgLobbyClientReadyMsgLobbyClientJoinMsgLobbyClientLeaveMsgClientInputMsgServerState"
+const _MessageHeaderName = "MsgAuthMsgAuthAckMsgConnectMsgDisconnectMsgLobbyCreateMsgLobbyCreatedMsgLobbyDeletedMsgLobbyGameStartMsgLobbyGameStartedMsgLobbyClientsNotReadyMsgLobbyClientReadyMsgLobbyClientJoinMsgLobbyClientLeaveMsgLobbiesSyncMsgLobbiesSyncedMsgLobbyPromoteMsgLobbyPromotedMsgLobbyKickMsgLobbyKickedMsgClientInputMsgServerState"
 
 var _MessageHeaderMap = map[MessageHeader]string{
 	MsgAuth:                 _MessageHeaderName[0:7],
@@ -53,12 +67,19 @@ var _MessageHeaderMap = map[MessageHeader]string{
 	MsgLobbyCreated:         _MessageHeaderName[54:69],
 	MsgLobbyDeleted:         _MessageHeaderName[69:84],
 	MsgLobbyGameStart:       _MessageHeaderName[84:101],
-	MsgLobbyClientsNotReady: _MessageHeaderName[101:124],
-	MsgLobbyClientReady:     _MessageHeaderName[124:143],
-	MsgLobbyClientJoin:      _MessageHeaderName[143:161],
-	MsgLobbyClientLeave:     _MessageHeaderName[161:180],
-	MsgClientInput:          _MessageHeaderName[180:194],
-	MsgServerState:          _MessageHeaderName[194:208],
+	MsgLobbyGameStarted:     _MessageHeaderName[101:120],
+	MsgLobbyClientsNotReady: _MessageHeaderName[120:143],
+	MsgLobbyClientReady:     _MessageHeaderName[143:162],
+	MsgLobbyClientJoin:      _MessageHeaderName[162:180],
+	MsgLobbyClientLeave:     _MessageHeaderName[180:199],
+	MsgLobbiesSync:          _MessageHeaderName[199:213],
+	MsgLobbiesSynced:        _MessageHeaderName[213:229],
+	MsgLobbyPromote:         _MessageHeaderName[229:244],
+	MsgLobbyPromoted:        _MessageHeaderName[244:260],
+	MsgLobbyKick:            _MessageHeaderName[260:272],
+	MsgLobbyKicked:          _MessageHeaderName[272:286],
+	MsgClientInput:          _MessageHeaderName[286:300],
+	MsgServerState:          _MessageHeaderName[300:314],
 }
 
 // String implements the Stringer interface.
@@ -86,18 +107,32 @@ var _MessageHeaderValue = map[string]MessageHeader{
 	strings.ToLower(_MessageHeaderName[69:84]):   MsgLobbyDeleted,
 	_MessageHeaderName[84:101]:                   MsgLobbyGameStart,
 	strings.ToLower(_MessageHeaderName[84:101]):  MsgLobbyGameStart,
-	_MessageHeaderName[101:124]:                  MsgLobbyClientsNotReady,
-	strings.ToLower(_MessageHeaderName[101:124]): MsgLobbyClientsNotReady,
-	_MessageHeaderName[124:143]:                  MsgLobbyClientReady,
-	strings.ToLower(_MessageHeaderName[124:143]): MsgLobbyClientReady,
-	_MessageHeaderName[143:161]:                  MsgLobbyClientJoin,
-	strings.ToLower(_MessageHeaderName[143:161]): MsgLobbyClientJoin,
-	_MessageHeaderName[161:180]:                  MsgLobbyClientLeave,
-	strings.ToLower(_MessageHeaderName[161:180]): MsgLobbyClientLeave,
-	_MessageHeaderName[180:194]:                  MsgClientInput,
-	strings.ToLower(_MessageHeaderName[180:194]): MsgClientInput,
-	_MessageHeaderName[194:208]:                  MsgServerState,
-	strings.ToLower(_MessageHeaderName[194:208]): MsgServerState,
+	_MessageHeaderName[101:120]:                  MsgLobbyGameStarted,
+	strings.ToLower(_MessageHeaderName[101:120]): MsgLobbyGameStarted,
+	_MessageHeaderName[120:143]:                  MsgLobbyClientsNotReady,
+	strings.ToLower(_MessageHeaderName[120:143]): MsgLobbyClientsNotReady,
+	_MessageHeaderName[143:162]:                  MsgLobbyClientReady,
+	strings.ToLower(_MessageHeaderName[143:162]): MsgLobbyClientReady,
+	_MessageHeaderName[162:180]:                  MsgLobbyClientJoin,
+	strings.ToLower(_MessageHeaderName[162:180]): MsgLobbyClientJoin,
+	_MessageHeaderName[180:199]:                  MsgLobbyClientLeave,
+	strings.ToLower(_MessageHeaderName[180:199]): MsgLobbyClientLeave,
+	_MessageHeaderName[199:213]:                  MsgLobbiesSync,
+	strings.ToLower(_MessageHeaderName[199:213]): MsgLobbiesSync,
+	_MessageHeaderName[213:229]:                  MsgLobbiesSynced,
+	strings.ToLower(_MessageHeaderName[213:229]): MsgLobbiesSynced,
+	_MessageHeaderName[229:244]:                  MsgLobbyPromote,
+	strings.ToLower(_MessageHeaderName[229:244]): MsgLobbyPromote,
+	_MessageHeaderName[244:260]:                  MsgLobbyPromoted,
+	strings.ToLower(_MessageHeaderName[244:260]): MsgLobbyPromoted,
+	_MessageHeaderName[260:272]:                  MsgLobbyKick,
+	strings.ToLower(_MessageHeaderName[260:272]): MsgLobbyKick,
+	_MessageHeaderName[272:286]:                  MsgLobbyKicked,
+	strings.ToLower(_MessageHeaderName[272:286]): MsgLobbyKicked,
+	_MessageHeaderName[286:300]:                  MsgClientInput,
+	strings.ToLower(_MessageHeaderName[286:300]): MsgClientInput,
+	_MessageHeaderName[300:314]:                  MsgServerState,
+	strings.ToLower(_MessageHeaderName[300:314]): MsgServerState,
 }
 
 // ParseMessageHeader attempts to convert a string to a MessageHeader.
